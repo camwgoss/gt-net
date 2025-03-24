@@ -3,7 +3,7 @@ Repo for semantic segmentation transfer learning.
 Edison Bailey | ebailey60@gatech.edu
 Nicole Cheetham | ncheetham3@gatech.edu
 Cameron Goss | camwgoss@gmail.com
-Grace Python | gpython3@gatech.edu
+Grace Python | gcpython@gmail.com
 
 1) Create a virtual environment. Anaconda example given here.
 > conda create --name gt-net python
