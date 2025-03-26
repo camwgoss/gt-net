@@ -1,7 +1,7 @@
 Repo for semantic segmentation transfer learning.
 
 Edison Bailey | ebailey60@gatech.edu
-Nicole Cheetham | ncheetham3@gatech.edu
+Nicole Cheetham | nicole.cheetham33@gmail.com
 Cameron Goss | camwgoss@gmail.com
 Grace Python | gcpython@gmail.com
 
