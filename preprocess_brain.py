@@ -2,33 +2,66 @@ import kagglehub
 import os
 from PIL import Image
 import numpy as np
+from sklearn.model_selection import train_test_split
 
 import utils.image_processing as image_processing
+import utils.split_data as split_data
 
 
 def download_and_preprocess_data(crop_size: int = 256):
     '''
-    Download and preprocess the brain tumor segmentation dataset from 
+    Download and preprocess the brain tumor segmentation dataset from
     https://www.kaggle.com/datasets/atikaakter11/brain-tumor-segmentation-dataset
-    Images will be converted to grayscale.
+    Images will be converted to grayscale
 
     Parameters
         crop_size: These images are large and can take a long time to
         train on. Provide a section size in pixels to randomly sample a
         square section of each image/mask to speed up training. Must be smaller
         than the smallest dimension of the raw images.
-    Returns
-        train_path, eval_path, test_path: Processed data paths.
     '''
 
     raw_path = _download_data()
 
     images, masks = _get_images_masks(raw_path)
 
-    images, masks = image_processing.crop_images(
-        images, masks, crop_size)
+    images, masks = image_processing.crop_images(images, masks, crop_size)
 
-    # TODO divide images/masks into training, evaluation, and test sets
+    images_train, images_eval, images_test = split_data.split_data(images)
+    masks_train, masks_eval, masks_test = split_data.split_data(masks)
+
+    _save_processed_data(images_train, masks_train,
+                         images_eval, masks_eval,
+                         images_test, masks_test)
+
+
+def load_processed_data():
+    '''
+    Returns:
+        images_train, masks_train, images_eval, masks_eval, images_test, masks_test:
+        List of Numpy arrays containing image and mask data, (image, row, column, [channel]).
+    '''
+
+    repo_dir = os.path.dirname(__file__)
+    data_path = os.path.join(
+        repo_dir, 'data', 'brain_tumor_segmentation', 'processed_data.npz')
+    processed_data = np.load(data_path)
+    return processed_data
+
+
+def _save_processed_data(images_train, masks_train,
+                         images_eval, masks_eval,
+                         images_test, masks_test):
+
+    processed_data = [images_train, masks_train,
+                      images_eval, masks_eval,
+                      images_test, masks_test]
+
+    repo_dir = os.path.dirname(__file__)
+    save_path = os.path.join(
+        repo_dir, 'data', 'brain_tumor_segmentation', 'processed_data.npz')
+
+    np.savez(save_path, *processed_data)
 
 
 def _download_data():
@@ -72,7 +105,6 @@ def _get_images_masks(path: str):
 
     datasets = [0, 1, 2, 3]  # 0: none, 1: glioma, 2: meningioma, 3: pituitary
     for dataset in datasets:
-        print('dataset', dataset)
         image_dir = os.path.join(
             path, 'Brain Tumor Segmentation Dataset', 'image', str(dataset))
         images_subset, image_files_subset = image_processing.get_images(
@@ -96,7 +128,6 @@ def _get_images_masks(path: str):
         root, ext = os.path.splitext(image_file)
         mask_file = root + '_m' + ext  # mask files add '_m' to file name
         if mask_file not in mask_files:  # no corresponding mask
-            print(mask_file)
             images.pop(ii)
             image_files.pop(ii)
 
@@ -106,7 +137,6 @@ def _get_images_masks(path: str):
         root, ext = os.path.splitext(mask_file)
         image_file = root[:-2] + ext  # remove '_m' from mask file name
         if image_file not in image_files:  # no corresponding image, so toss
-            print(image_file)
             masks.pop(mm)
             mask_files.pop(mm)
 
