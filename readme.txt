@@ -12,8 +12,10 @@ Grace Python | gcpython@gmail.com
 2) Install required Python libraries.
 > pip install -r requirements.txt
 
-3) Download data. First navigate to /gt-net .
-> python download_data.py
+3) Download and preprocess data. First navigate to /gt-net
+
+3)a)
+> python preprocess_.py
 
 4) (Optional as needed.) Update requirements.txt during development.
 > pip freeze > requirements.txt
