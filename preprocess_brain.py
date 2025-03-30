@@ -2,7 +2,7 @@ import kagglehub
 import os
 from PIL import Image
 import numpy as np
-from sklearn.model_selection import train_test_split
+import matplotlib.pyplot as plt
 
 import utils.image_processing as image_processing
 import utils.split_data as split_data
@@ -24,8 +24,10 @@ def download_and_preprocess_data(crop_size: int = 256):
     raw_path = _download_data()
 
     images, masks = _get_images_masks(raw_path)
+    _plot_images_masks(images, masks, save_name='original')
 
     images, masks = image_processing.crop_images(images, masks, crop_size)
+    _plot_images_masks(images, masks, save_name='cropped')
 
     images_train, images_eval, images_test = split_data.split_data(images)
     masks_train, masks_eval, masks_test = split_data.split_data(masks)
@@ -62,6 +64,34 @@ def _save_processed_data(images_train, masks_train,
         repo_dir, 'data', 'brain_tumor_segmentation', 'processed_data.npz')
 
     np.savez(save_path, *processed_data)
+
+
+def _plot_images_masks(images: list, masks: list, save_name: str, num_samples=10):
+    '''
+    Plot images and masks side by side.
+    '''
+
+    if num_samples > len(images):  # not enough samples to plot, so plot fewer
+        num_samples = len(images)
+
+    # randomly select which images/masks to plot
+    samples = np.random.choice(len(images), num_samples, replace=False)
+    for sample in samples:
+        images_subset = [images[ss] for ss in samples]
+        masks_subset = [masks[ss] for ss in samples]
+
+    fig, axes = plt.subplots(num_samples, 2, dpi=200, figsize=[2, num_samples])
+
+    for ii in range(len(images_subset)):
+        axes[ii, 0].imshow(images_subset[ii], cmap='plasma')
+        axes[ii, 1].imshow(masks_subset[ii], cmap='plasma')
+        axes[ii, 0].axis('off')
+        axes[ii, 1].axis('off')
+
+    repo_dir = os.path.dirname(__file__)
+    save_path = os.path.join(
+        repo_dir, 'data', 'brain_tumor_segmentation', save_name)
+    fig.savefig(save_path, bbox_inches='tight')
 
 
 def _download_data():
