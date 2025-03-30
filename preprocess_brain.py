@@ -6,15 +6,15 @@ import numpy as np
 import utils.image_processing as image_processing
 
 
-def download_and_preprocess_data(subsection_size: int = 256):
+def download_and_preprocess_data(crop_size: int = 256):
     '''
     Download and preprocess the brain tumor segmentation dataset from 
     https://www.kaggle.com/datasets/atikaakter11/brain-tumor-segmentation-dataset
     Images will be converted to grayscale.
 
     Parameters
-        subsection_size: These images are large and can take a long time to
-        train on. Provide a subsection size in pixels to randomly sample a
+        crop_size: These images are large and can take a long time to
+        train on. Provide a section size in pixels to randomly sample a
         square section of each image/mask to speed up training. Must be smaller
         than the smallest dimension of the raw images.
     Returns
@@ -22,12 +22,13 @@ def download_and_preprocess_data(subsection_size: int = 256):
     '''
 
     raw_path = _download_data()
+
     images, masks = _get_images_masks(raw_path)
 
-    if subsection_size is not None:
-        pass
+    images, masks = image_processing.crop_images(
+        images, masks, crop_size)
 
-    return images, masks
+    # TODO divide images/masks into training, evaluation, and test sets
 
 
 def _download_data():
@@ -85,8 +86,6 @@ def _get_images_masks(path: str):
         masks += masks_subset
         mask_files += mask_files_subset
 
-    masks = image_processing.threshold_masks(masks)
-
     # This is not a perfect dataset, so there are a couple images without
     # corresponding masks or vice versa. Crawl through masks and images and
     # toss un-paired entries.
@@ -108,11 +107,24 @@ def _get_images_masks(path: str):
         image_file = root[:-2] + ext  # remove '_m' from mask file name
         if image_file not in image_files:  # no corresponding image, so toss
             print(image_file)
-            masks[mm] = None
-            mask_files[mm] = None
+            masks.pop(mm)
+            mask_files.pop(mm)
+
+    # resize masks to match image dimensions
+    for ii in range(len(images)):
+        image = images[ii]
+        image = Image.fromarray(image)
+
+        mask = masks[ii]
+        mask = Image.fromarray(mask)  # np.array -> Image
+        mask = mask.resize(image.size)  # resize mask to image dimensions
+        mask = np.array(mask)  # Image -> np.array
+        masks[ii] = mask
+
+    masks = image_processing.threshold_masks(masks)
 
     return images, masks
 
 
 if __name__ == '__main__':
-    images, masks = download_and_preprocess_data(subsection_size=64)
+    download_and_preprocess_data(crop_size=256)
