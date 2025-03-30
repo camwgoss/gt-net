@@ -13,9 +13,7 @@ Grace Python | gcpython@gmail.com
 > pip install -r requirements.txt
 
 3) Download and preprocess data. First navigate to /gt-net
-
-3)a)
-> python preprocess_.py
+> python preprocess_brain.py
 
 4) (Optional as needed.) Update requirements.txt during development.
 > pip freeze > requirements.txt
