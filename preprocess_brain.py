@@ -2,32 +2,48 @@ import kagglehub
 import os
 from PIL import Image
 import numpy as np
-import matplotlib.pyplot as plt
 
 import utils.image_processing as image_processing
 import utils.split_data as split_data
 
 
-def download_and_preprocess_data(crop_size: int = 256):
+def download_and_preprocess_data(output_size: int = 256, output_type='crop'):
     '''
     Download and preprocess the brain tumor segmentation dataset from
     https://www.kaggle.com/datasets/atikaakter11/brain-tumor-segmentation-dataset
     Images will be converted to grayscale
 
     Parameters
-        crop_size: These images are large and can take a long time to
-        train on. Provide a section size in pixels to randomly sample a
-        square section of each image/mask to speed up training. Must be smaller
-        than the smallest dimension of the raw images.
+        output_size: These images are large and can take a long time to train 
+        on. Select output size in pixels for the square output.
+        output_type:
+            'crop': Randomly sample a square section of each image/mask.
+            Must be smaller than the smallest dimension of the raw images.
+            'resize': Resize the original image. This will apply a uniform
+            scaling and crop as necessary to create a square output.
     '''
 
     raw_path = _download_data()
 
     images, masks = _get_images_masks(raw_path)
-    _plot_images_masks(images, masks, save_name='original')
+    fig = image_processing.plot_images_masks(images, masks)
+    repo_dir = os.path.dirname(__file__)
+    save_path = os.path.join(
+        repo_dir, 'data', 'brain_tumor_segmentation', 'raw')
+    fig.savefig(save_path, bbox_inches='tight')
 
-    images, masks = image_processing.crop_images(images, masks, crop_size)
-    _plot_images_masks(images, masks, save_name='cropped')
+    if output_type == 'crop':
+        images, masks = image_processing.crop_images(
+            images, masks, output_size)
+    elif output_type == 'resize':
+        images, masks = image_processing.resize_images(
+            images, masks, output_size)
+
+    fig = image_processing.plot_images_masks(images, masks)
+    repo_dir = os.path.dirname(__file__)
+    save_path = os.path.join(
+        repo_dir, 'data', 'brain_tumor_segmentation', 'processed')
+    fig.savefig(save_path, bbox_inches='tight')
 
     images_train, images_eval, images_test = split_data.split_data(images)
     masks_train, masks_eval, masks_test = split_data.split_data(masks)
@@ -41,7 +57,7 @@ def load_processed_data():
     '''
     Returns:
         images_train, masks_train, images_eval, masks_eval, images_test, masks_test:
-        List of Numpy arrays containing image and mask data, (image, row, column, [channel]).
+        List of Numpy arrays containing image and mask data, (row, column, [channel]).
     '''
 
     repo_dir = os.path.dirname(__file__)
@@ -64,34 +80,6 @@ def _save_processed_data(images_train, masks_train,
         repo_dir, 'data', 'brain_tumor_segmentation', 'processed_data.npz')
 
     np.savez(save_path, *processed_data)
-
-
-def _plot_images_masks(images: list, masks: list, save_name: str, num_samples=10):
-    '''
-    Plot images and masks side by side.
-    '''
-
-    if num_samples > len(images):  # not enough samples to plot, so plot fewer
-        num_samples = len(images)
-
-    # randomly select which images/masks to plot
-    samples = np.random.choice(len(images), num_samples, replace=False)
-    for sample in samples:
-        images_subset = [images[ss] for ss in samples]
-        masks_subset = [masks[ss] for ss in samples]
-
-    fig, axes = plt.subplots(num_samples, 2, dpi=200, figsize=[2, num_samples])
-
-    for ii in range(len(images_subset)):
-        axes[ii, 0].imshow(images_subset[ii], cmap='plasma')
-        axes[ii, 1].imshow(masks_subset[ii], cmap='plasma')
-        axes[ii, 0].axis('off')
-        axes[ii, 1].axis('off')
-
-    repo_dir = os.path.dirname(__file__)
-    save_path = os.path.join(
-        repo_dir, 'data', 'brain_tumor_segmentation', save_name)
-    fig.savefig(save_path, bbox_inches='tight')
 
 
 def _download_data():
@@ -124,7 +112,7 @@ def _get_images_masks(path: str):
     Arguments:
         path: Path to raw downloaded data.
     Returns:
-        images, masks: Numpy array of image data, (image, row, column, [channel])
+        images, masks: List of Numpy arrays, (row, column, [channel])
     '''
 
     # used to store data for all tumor types
@@ -187,4 +175,4 @@ def _get_images_masks(path: str):
 
 
 if __name__ == '__main__':
-    download_and_preprocess_data(crop_size=256)
+    download_and_preprocess_data(output_size=256, output_type='resize')
