@@ -54,14 +54,15 @@ def download_and_preprocess_data(output_size: int = 256, output_type='crop'):
                          images_test, labels_test)
 
     # raw image/mask plot
-    fig = image_processing.plot_images_masks(images_raw, masks_raw)
+    fig = image_processing.plot_images_labels(images_raw, masks_raw)
     repo_dir = os.path.dirname(__file__)
     save_path = os.path.join(
         repo_dir, 'data', 'brain_tumor_segmentation', 'raw')
     fig.savefig(save_path, bbox_inches='tight')
 
     # processed image/mask plot
-    fig = image_processing.plot_images_masks(images, masks)
+    fig = image_processing.plot_images_labels(
+        images_processed, labels_processed)
     repo_dir = os.path.dirname(__file__)
     save_path = os.path.join(
         repo_dir, 'data', 'brain_tumor_segmentation', 'processed')
