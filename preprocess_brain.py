@@ -2,6 +2,7 @@ import kagglehub
 import os
 from PIL import Image
 import numpy as np
+import torch
 
 import utils.image_processing as image_processing
 import utils.split_data as split_data
@@ -25,39 +26,53 @@ def download_and_preprocess_data(output_size: int = 256, output_type='crop'):
 
     raw_path = _download_data()
 
-    images, masks = _get_images_masks(raw_path)
-    fig = image_processing.plot_images_masks(images, masks)
+    datasets = [0, 1, 2, 3]  # 0: none, 1: glioma, 2: meningioma, 3: pituitary
+    images_processed = np.empty([0, output_size, output_size])
+    labels_processed = np.empty([0, output_size, output_size])
+    for dataset in datasets:
+        images_raw, masks_raw = _get_images_masks(raw_path, dataset=dataset)
+
+        if output_type == 'crop':
+            images, masks = image_processing.crop_images(
+                images_raw, masks_raw, output_size)
+        elif output_type == 'resize':
+            images, masks = image_processing.resize_images(
+                images_raw, masks_raw, output_size)
+
+        labels = image_processing.masks_to_labels(masks, label=dataset)
+
+        images_processed = np.concatenate([images_processed, images], axis=0)
+        labels_processed = np.concatenate([labels_processed, labels], axis=0)
+
+    images_train, images_eval, images_test = split_data.split_data(
+        images_processed)
+    labels_train, labels_eval, labels_test = split_data.split_data(
+        labels_processed)
+
+    _save_processed_data(images_train, labels_train,
+                         images_eval, labels_eval,
+                         images_test, labels_test)
+
+    # raw image/mask plot
+    fig = image_processing.plot_images_masks(images_raw, masks_raw)
     repo_dir = os.path.dirname(__file__)
     save_path = os.path.join(
         repo_dir, 'data', 'brain_tumor_segmentation', 'raw')
     fig.savefig(save_path, bbox_inches='tight')
 
-    if output_type == 'crop':
-        images, masks = image_processing.crop_images(
-            images, masks, output_size)
-    elif output_type == 'resize':
-        images, masks = image_processing.resize_images(
-            images, masks, output_size)
-
+    # processed image/mask plot
     fig = image_processing.plot_images_masks(images, masks)
     repo_dir = os.path.dirname(__file__)
     save_path = os.path.join(
         repo_dir, 'data', 'brain_tumor_segmentation', 'processed')
     fig.savefig(save_path, bbox_inches='tight')
 
-    images_train, images_eval, images_test = split_data.split_data(images)
-    masks_train, masks_eval, masks_test = split_data.split_data(masks)
-
-    _save_processed_data(images_train, masks_train,
-                         images_eval, masks_eval,
-                         images_test, masks_test)
-
 
 def load_processed_data():
     '''
     Returns:
         images_train, masks_train, images_eval, masks_eval, images_test, masks_test:
-        List of Numpy arrays containing image and mask data, (row, column, [channel]).
+        Numpy array of image and mask data, (sample, row, column).
     '''
 
     repo_dir = os.path.dirname(__file__)
@@ -67,19 +82,19 @@ def load_processed_data():
     return processed_data
 
 
-def _save_processed_data(images_train, masks_train,
-                         images_eval, masks_eval,
-                         images_test, masks_test):
+def _save_processed_data(images_train, labels_train,
+                         images_eval, labels_eval,
+                         images_test, labels_test):
 
-    processed_data = [images_train, masks_train,
-                      images_eval, masks_eval,
-                      images_test, masks_test]
+    processed_data = {'images_train': images_train, 'labels_train': labels_train,
+                      'images_eval': images_eval, 'labels_eval': labels_eval,
+                      'images_test': images_test, 'labels_test': labels_test}
 
     repo_dir = os.path.dirname(__file__)
     save_path = os.path.join(
         repo_dir, 'data', 'brain_tumor_segmentation', 'processed_data.npz')
 
-    np.savez(save_path, *processed_data)
+    np.savez(save_path, **processed_data)
 
 
 def _download_data():
@@ -104,15 +119,16 @@ def _download_data():
     return path
 
 
-def _get_images_masks(path: str):
+def _get_images_masks(path: str, dataset: int):
     '''
     Get image and mask data for all tumor types. This processing step tosses
     information about tumor type, so the mask only contains labels for no tumor
     (0) and tumor (255).
     Arguments:
         path: Path to raw downloaded data.
+        dataset: 0: none, 1: glioma, 2: meningioma, 3: pituitary
     Returns:
-        images, masks: List of Numpy arrays, (row, column, [channel])
+        images, masks: Numpy array (sample, row, column)
     '''
 
     # used to store data for all tumor types
@@ -121,20 +137,18 @@ def _get_images_masks(path: str):
     masks = []
     mask_files = []
 
-    datasets = [0, 1, 2, 3]  # 0: none, 1: glioma, 2: meningioma, 3: pituitary
-    for dataset in datasets:
-        image_dir = os.path.join(
-            path, 'Brain Tumor Segmentation Dataset', 'image', str(dataset))
-        images_subset, image_files_subset = image_processing.get_images(
-            image_dir)
-        images += images_subset
-        image_files += image_files_subset
+    image_dir = os.path.join(
+        path, 'Brain Tumor Segmentation Dataset', 'image', str(dataset))
+    images_subset, image_files_subset = image_processing.get_images(
+        image_dir)
+    images += images_subset
+    image_files += image_files_subset
 
-        mask_dir = os.path.join(
-            path, 'Brain Tumor Segmentation Dataset', 'mask', str(dataset))
-        masks_subset, mask_files_subset = image_processing.get_images(mask_dir)
-        masks += masks_subset
-        mask_files += mask_files_subset
+    mask_dir = os.path.join(
+        path, 'Brain Tumor Segmentation Dataset', 'mask', str(dataset))
+    masks_subset, mask_files_subset = image_processing.get_images(mask_dir)
+    masks += masks_subset
+    mask_files += mask_files_subset
 
     # This is not a perfect dataset, so there are a couple images without
     # corresponding masks or vice versa. Crawl through masks and images and
@@ -169,10 +183,11 @@ def _get_images_masks(path: str):
         mask = np.array(mask)  # Image -> np.array
         masks[ii] = mask
 
+    # input masks and resized masks are non-binary; convert values to 0 or 255
     masks = image_processing.threshold_masks(masks)
 
     return images, masks
 
 
 if __name__ == '__main__':
-    download_and_preprocess_data(output_size=256, output_type='resize')
+    download_and_preprocess_data(output_size=128, output_type='resize')

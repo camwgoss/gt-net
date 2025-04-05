@@ -11,7 +11,7 @@ def get_images(image_dir: str, grayscale=True):
         image_dir: Directory containing images.
         grayscale: whether to return images in grayscale.
     Returns:
-        images: List of Numpy arrays, (row, column, [channel]).
+        images: List of Numpy arrays, (row, column).
         image_files: List of strings containing file names.
     '''
 
@@ -38,9 +38,9 @@ def threshold_masks(masks):
     values other than 0 and 255. Use thresholding to convert to binary masks.
     This operation is performed in place.
     Arguments:
-        masks: List of Numpy arrays, (row, column, [channel]).
+        masks: List of Numpy arrays, (row, column).
     Returns:
-        masks: Thresholded masks, (row, column, [channel]).
+        masks: Thresholded masks, (row, column).
     '''
 
     for mask in masks:
@@ -49,12 +49,28 @@ def threshold_masks(masks):
     return masks
 
 
+def masks_to_labels(masks, label: int):
+    '''
+    Convert binary masks with values 0 or 255 to labels with values 0 or label.
+    Arguments:
+        masks: List of Numpy arrays, (row, column). Values 0 or 255.
+        label: Label to replace non-zero values with.
+    Returns:
+        labels: List of Numpy arrays, (row, column)
+    '''
+
+    masks = np.copy(masks)
+    for mask in masks:
+        mask[mask != 0] = label
+    return masks
+
+
 def crop_images(images: list, masks: list = None, output_size: int = 256):
     '''
     Randomly extract a square section from each image. If the image has a 
     dimension smaller than section_size, that image will be removed.
     Arguments:
-        images: List of Numpy arrays, (row, column, [channel]).
+        images: List of Numpy arrays, (row, column).
         masks: Must have identical dimensions to images.
         output_size: Dimension in pixels of square section to extract.
     Returns:
@@ -88,9 +104,11 @@ def crop_images(images: list, masks: list = None, output_size: int = 256):
                 mask_out = mask[row_start:row_end, col_start:col_end]
                 masks_out.append(mask_out)
 
+    images_out = np.array(images_out)
     if masks is None:
         return images_out
     else:
+        masks_out = np.array(masks_out)
         return images_out, masks_out
 
 
@@ -148,12 +166,13 @@ def resize_images(images: list, masks: list = None, output_size: int = 256):
 
             masks_out.append(mask_out)
 
+    images_out = np.array(images_out)
     if masks is None:
         return images_out
     else:
         # resampling converted binary mask to non-binary mask; convert back
         mask_out = threshold_masks(masks_out)
-
+        masks_out = np.array(masks_out)
         return images_out, masks_out
 
 
