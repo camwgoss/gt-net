@@ -1,7 +1,6 @@
 import preprocess_brain
 import torch
 from torch.utils.data import DataLoader, TensorDataset
-import torch.nn as nn
 import os
 import segmentation_models_pytorch
 
@@ -12,19 +11,22 @@ class Trainer:
     '''
     Train U-Net for semantic segmentation. Input data assumed to be grayscale.
     If multi-channel is desired, modify _load_data to not unsqueeze(-).
+    Arguments:
+        dataset: Dateset to run on, {'brain', 'liver', 'coco'}.
+        device: Compute device, {'cuda', 'cpu'}.
     '''
 
-    def __init__(self, device='cpu'):
+    def __init__(self, dataset: str = 'brain', device: str = 'cpu'):
         self.model = segmentation_models_pytorch.Unet(
             in_channels=1, classes=4, device=device)
 
-        # self.criterion = nn.CrossEntropyLoss()
         self.criterion = segmentation_models_pytorch.losses.DiceLoss(
             mode='multiclass')
 
         self.optimizer = torch.optim.AdamW(self.model.parameters())
 
-        self._load_data()  # TODO this is hard coded to load brain tumor data
+        # TODO this is hard coded to load brain tumor data
+        self._load_data(dataset)
 
     def train(self):
         batch_size = 1  # batch size used in original U-Net paper
@@ -53,12 +55,13 @@ class Trainer:
             fig: Plot showing images, labels, and predictions
         '''
 
-        # evaluation; this is hard coded to evaluate all samples
-        data_eval = DataLoader(self.data_eval,
-                               batch_size=len(self.data_eval))
-        for images, labels in data_eval:
-            labels_predicted = self.model(images)
-            loss = self.criterion(labels_predicted, labels)
+        with torch.no_grad():
+            # evaluation; this is hard coded to evaluate all samples
+            data_eval = DataLoader(self.data_eval,
+                                   batch_size=len(self.data_eval))
+            for images, labels in data_eval:
+                labels_predicted = self.model(images)
+                loss = self.criterion(labels_predicted, labels)
 
         fig = image_processing.plot_images_labels(
             images=images.squeeze(1),
@@ -68,9 +71,12 @@ class Trainer:
 
         return loss.item(), fig
 
-    def _load_data(self):
-        # TODO the data loader would really be chosen based on a trainer input, e.g., coco, liver, brain
-        data = preprocess_brain.load_processed_data()
+    def _load_data(self, dataset: str = 'brain'):
+        if dataset == 'brain':
+            data = preprocess_brain.load_processed_data()
+        else:
+            raise Exception('Error: the ' + dataset +
+                            ' dataset has not been implemented.')
 
         # unsqueeze(-1) because data is grayscale, so need to explicitely
         # define 1 input channel; this channel is squeezed out during image
