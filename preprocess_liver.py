@@ -8,9 +8,7 @@ import utils.split_data as split_data
 
 def download_and_preprocess_data(output_size: int = 256, output_type='crop'):
     '''
-    Download and preprocess the brain tumor segmentation dataset from
-    https://www.kaggle.com/datasets/atikaakter11/brain-tumor-segmentation-dataset
-    Images will be converted to grayscale
+    Download and preprocess the liver tumor segmentation dataset. Data must be downloaded directly as discussed in readME.
 
     Parameters
         output_size: These images are large and can take a long time to train 
