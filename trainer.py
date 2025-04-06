@@ -1,9 +1,9 @@
 import preprocess_brain
 import torch
 from torch.utils.data import DataLoader, TensorDataset
-from models.unet import UNet
 import torch.nn as nn
 import os
+import segmentation_models_pytorch
 
 import utils.image_processing as image_processing
 
@@ -15,9 +15,12 @@ class Trainer:
     '''
 
     def __init__(self):
-        self.loss = nn.CrossEntropyLoss()
-        self.model = UNet(in_channels=1, out_channels=4)
-        self.criterion = nn.CrossEntropyLoss()
+        self.model = segmentation_models_pytorch.Unet(in_channels=1, classes=4)
+
+        # self.criterion = nn.CrossEntropyLoss()
+        self.criterion = segmentation_models_pytorch.losses.DiceLoss(
+            mode='multiclass')
+
         self.optimizer = torch.optim.AdamW(self.model.parameters())
 
         self._load_data()  # TODO this is hard coded to load brain tumor data
@@ -28,11 +31,11 @@ class Trainer:
         epochs = 5
         for epoch in range(epochs):
             for images, labels in data_train:
-                labels_predicted = self.model(images)
-                self.optimizer.zero_grad()
-                loss = self.criterion(labels_predicted, labels)
-                loss.backward()
-                self.optimizer.step()
+                    self.optimizer.zero_grad()
+                    labels_predicted = self.model(images)
+                    loss = self.criterion(labels_predicted, labels)
+                    loss.backward()
+                    self.optimizer.step()
 
             loss_eval, fig = self.evaluate()
             print('Epoch', epoch, '|', 'Evaluation Loss', loss_eval)
@@ -93,10 +96,10 @@ if __name__ == '__main__':
     trainer = Trainer()
 
     # train from scratch
-    # trainer.train()
+    trainer.train()
 
     # load existing model parameters
-    model_dir = os.path.dirname(__file__)
-    model_path = os.path.join(model_dir, 'model.pth')
-    trainer.model.load_state_dict(torch.load(model_path))
-    trainer.evaluate()
+    # model_dir = os.path.dirname(__file__)
+    # model_path = os.path.join(model_dir, 'model.pth')
+    # trainer.model.load_state_dict(torch.load(model_path))
+    # trainer.evaluate()
