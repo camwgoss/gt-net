@@ -176,7 +176,8 @@ def resize_images(images: list, masks: list = None, output_size: int = 256):
         return images_out, masks_out
 
 
-def plot_images_labels(images: list, labels: list, labels_predicted=None, num_samples=10):
+def plot_images_labels(images: np.array, labels: np.array,
+                       labels_predicted: np.array = None, num_samples=10):
     '''
     Plot images and labels side by side. Can optionally plot predicted labels.
     Arguments:
@@ -209,13 +210,15 @@ def plot_images_labels(images: list, labels: list, labels_predicted=None, num_sa
 
     # plot data
     for ii in range(len(images_subset)):
-        axes[ii, 0].imshow(images_subset[ii], cmap='plasma')
-        axes[ii, 1].imshow(labels_subset[ii], cmap='plasma')
+        axes[ii, 0].imshow(images_subset[ii], cmap='inferno')
+        axes[ii, 1].imshow(labels_subset[ii],
+                           cmap='inferno', vmax=labels.max())
         axes[ii, 0].axis('off')
         axes[ii, 1].axis('off')
 
         if labels_predicted is not None:
-            axes[ii, 2].imshow(labels_predicted_subset[ii], cmap='plasma')
+            axes[ii, 2].imshow(labels_predicted_subset[ii],
+                               cmap='inferno', vmax=labels.max())
             axes[ii, 2].axis('off')
 
     # set titles
