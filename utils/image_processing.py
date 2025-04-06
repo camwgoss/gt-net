@@ -11,7 +11,7 @@ def get_images(image_dir: str, grayscale=True):
         image_dir: Directory containing images.
         grayscale: whether to return images in grayscale.
     Returns:
-        images: List of Numpy arrays, (row, column, [channel]).
+        images: List of Numpy arrays, (row, column).
         image_files: List of strings containing file names.
     '''
 
@@ -38,9 +38,9 @@ def threshold_masks(masks):
     values other than 0 and 255. Use thresholding to convert to binary masks.
     This operation is performed in place.
     Arguments:
-        masks: List of Numpy arrays, (row, column, [channel]).
+        masks: List of Numpy arrays, (row, column).
     Returns:
-        masks: Thresholded masks, (row, column, [channel]).
+        masks: Thresholded masks, (row, column).
     '''
 
     for mask in masks:
@@ -49,12 +49,28 @@ def threshold_masks(masks):
     return masks
 
 
+def masks_to_labels(masks, label: int):
+    '''
+    Convert binary masks with values 0 or 255 to labels with values 0 or label.
+    Arguments:
+        masks: List of Numpy arrays, (row, column). Values 0 or 255.
+        label: Label to replace non-zero values with.
+    Returns:
+        labels: List of Numpy arrays, (row, column)
+    '''
+
+    masks = np.copy(masks)
+    for mask in masks:
+        mask[mask != 0] = label
+    return masks
+
+
 def crop_images(images: list, masks: list = None, output_size: int = 256):
     '''
     Randomly extract a square section from each image. If the image has a 
     dimension smaller than section_size, that image will be removed.
     Arguments:
-        images: List of Numpy arrays, (row, column, [channel]).
+        images: List of Numpy arrays, (row, column).
         masks: Must have identical dimensions to images.
         output_size: Dimension in pixels of square section to extract.
     Returns:
@@ -88,9 +104,11 @@ def crop_images(images: list, masks: list = None, output_size: int = 256):
                 mask_out = mask[row_start:row_end, col_start:col_end]
                 masks_out.append(mask_out)
 
+    images_out = np.array(images_out)
     if masks is None:
         return images_out
     else:
+        masks_out = np.array(masks_out)
         return images_out, masks_out
 
 
@@ -148,20 +166,22 @@ def resize_images(images: list, masks: list = None, output_size: int = 256):
 
             masks_out.append(mask_out)
 
+    images_out = np.array(images_out)
     if masks is None:
         return images_out
     else:
         # resampling converted binary mask to non-binary mask; convert back
         mask_out = threshold_masks(masks_out)
-
+        masks_out = np.array(masks_out)
         return images_out, masks_out
 
 
-def plot_images_masks(images: list, masks: list, num_samples=10):
+def plot_images_labels(images: list, labels: list, labels_predicted=None, num_samples=10):
     '''
-    Plot images and masks side by side.
+    Plot images and labels side by side. Can optionally plot predicted labels.
     Arguments:
-        images, masks: List of Numpy arrays, (row, column, [channel]).
+        images, labels, labels_predicted: Numpy array (sample, row, column) or
+        list of Numpy arrays (row, column)
         num_samples: Number of samples to plot
     Returns:
         fig: Figure containing images.
@@ -174,14 +194,34 @@ def plot_images_masks(images: list, masks: list, num_samples=10):
     samples = np.random.choice(len(images), num_samples, replace=False)
     for sample in samples:
         images_subset = [images[ss] for ss in samples]
-        masks_subset = [masks[ss] for ss in samples]
+        labels_subset = [labels[ss] for ss in samples]
 
-    fig, axes = plt.subplots(num_samples, 2, dpi=200, figsize=[2, num_samples])
+        if labels_predicted is not None:
+            labels_predicted_subset = [labels_predicted[ss] for ss in samples]
 
+    # make figure
+    if labels_predicted is not None:
+        columns = 3
+    else:
+        columns = 2
+    fig, axes = plt.subplots(num_samples, columns,
+                             dpi=200, figsize=[columns, num_samples])
+
+    # plot data
     for ii in range(len(images_subset)):
         axes[ii, 0].imshow(images_subset[ii], cmap='plasma')
-        axes[ii, 1].imshow(masks_subset[ii], cmap='plasma')
+        axes[ii, 1].imshow(labels_subset[ii], cmap='plasma')
         axes[ii, 0].axis('off')
         axes[ii, 1].axis('off')
+
+        if labels_predicted is not None:
+            axes[ii, 2].imshow(labels_predicted_subset[ii], cmap='plasma')
+            axes[ii, 2].axis('off')
+
+    # set titles
+    axes[0, 0].set_title('Image')
+    axes[0, 1].set_title('Label')
+    if labels_predicted is not None:
+        axes[0, 2].set_title('Predict')
 
     return fig
