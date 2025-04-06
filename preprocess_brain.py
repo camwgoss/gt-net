@@ -191,4 +191,4 @@ def _get_images_masks(path: str, dataset: int):
 
 
 if __name__ == '__main__':
-    download_and_preprocess_data(output_size=128, output_type='resize')
+    download_and_preprocess_data(output_size=256, output_type='resize')
