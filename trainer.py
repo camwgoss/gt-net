@@ -14,8 +14,9 @@ class Trainer:
     If multi-channel is desired, modify _load_data to not unsqueeze(-).
     '''
 
-    def __init__(self):
-        self.model = segmentation_models_pytorch.Unet(in_channels=1, classes=4)
+    def __init__(self, device='cpu'):
+        self.model = segmentation_models_pytorch.Unet(
+            in_channels=1, classes=4, device=device)
 
         # self.criterion = nn.CrossEntropyLoss()
         self.criterion = segmentation_models_pytorch.losses.DiceLoss(
@@ -26,16 +27,16 @@ class Trainer:
         self._load_data()  # TODO this is hard coded to load brain tumor data
 
     def train(self):
-        # TODO batch size is hard coded
-        data_train = DataLoader(self.data_train, batch_size=1)
+        batch_size = 1  # batch size used in original U-Net paper
+        data_train = DataLoader(self.data_train, batch_size=batch_size)
         epochs = 5
         for epoch in range(epochs):
             for images, labels in data_train:
-                    self.optimizer.zero_grad()
-                    labels_predicted = self.model(images)
-                    loss = self.criterion(labels_predicted, labels)
-                    loss.backward()
-                    self.optimizer.step()
+                self.optimizer.zero_grad()
+                labels_predicted = self.model(images)
+                loss = self.criterion(labels_predicted, labels)
+                loss.backward()
+                self.optimizer.step()
 
             loss_eval, fig = self.evaluate()
             print('Epoch', epoch, '|', 'Evaluation Loss', loss_eval)
@@ -93,7 +94,8 @@ class Trainer:
 
 
 if __name__ == '__main__':
-    trainer = Trainer()
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    trainer = Trainer(device=device)
 
     # train from scratch
     trainer.train()
