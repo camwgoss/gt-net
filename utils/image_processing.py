@@ -209,7 +209,7 @@ def plot_images_labels(images: np.array, labels: np.array,
                              dpi=200, figsize=[columns, num_samples])
 
     # plot data
-    if type(labels) is np.array:
+    if type(labels) is np.ndarray:
         vmax = labels.max()  # np.array (sample, channel, row, col)
     else:
         vmax = None  # list of np.array (channel, row, col)
