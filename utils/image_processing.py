@@ -209,16 +209,21 @@ def plot_images_labels(images: np.array, labels: np.array,
                              dpi=200, figsize=[columns, num_samples])
 
     # plot data
+    if type(labels) is np.array:
+        vmax = labels.max()  # np.array (sample, channel, row, col)
+    else:
+        vmax = None  # list of np.array (channel, row, col)
+
     for ii in range(len(images_subset)):
         axes[ii, 0].imshow(images_subset[ii], cmap='inferno')
         axes[ii, 1].imshow(labels_subset[ii],
-                           cmap='inferno', vmax=labels.max())
+                           cmap='inferno', vmax=vmax)
         axes[ii, 0].axis('off')
         axes[ii, 1].axis('off')
 
         if labels_predicted is not None:
             axes[ii, 2].imshow(labels_predicted_subset[ii],
-                               cmap='inferno', vmax=labels.max())
+                               cmap='inferno', vmax=vmax)
             axes[ii, 2].axis('off')
 
     # set titles
