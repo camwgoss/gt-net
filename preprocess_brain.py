@@ -8,11 +8,11 @@ import utils.image_processing as image_processing
 import utils.split_data as split_data
 
 
-def download_and_preprocess_data(output_size: int = 256, output_type='crop'):
+def download_and_preprocess_data(output_size: int = 256, output_type='resize'):
     '''
     Download and preprocess the brain tumor segmentation dataset from
     https://www.kaggle.com/datasets/atikaakter11/brain-tumor-segmentation-dataset
-    Images will be converted to grayscale
+    Images will be converted to grayscale.
 
     Parameters
         output_size: These images are large and can take a long time to train 
@@ -26,43 +26,64 @@ def download_and_preprocess_data(output_size: int = 256, output_type='crop'):
 
     raw_path = _download_data()
 
+    all_images_train = np.empty([0, output_size, output_size])
+    all_labels_train = np.empty([0, output_size, output_size])
+    all_images_eval = np.empty([0, output_size, output_size])
+    all_labels_eval = np.empty([0, output_size, output_size])
+    all_images_test = np.empty([0, output_size, output_size])
+    all_labels_test = np.empty([0, output_size, output_size])
+
     datasets = [0, 1, 2, 3]  # 0: none, 1: glioma, 2: meningioma, 3: pituitary
-    images_processed = np.empty([0, output_size, output_size])
-    labels_processed = np.empty([0, output_size, output_size])
     for dataset in datasets:
+        if output_type == 'crop':
+            processor = image_processing.crop_images
+        elif output_type == 'resize':
+            processor = image_processing.resize_images
+
         images_raw, masks_raw = _get_images_masks(raw_path, dataset=dataset)
 
-        if output_type == 'crop':
-            images, masks = image_processing.crop_images(
-                images_raw, masks_raw, output_size)
-        elif output_type == 'resize':
-            images, masks = image_processing.resize_images(
-                images_raw, masks_raw, output_size)
+        # split immediately before any modification to avoid data contamination
+        images_train, images_eval, images_test = split_data.split_data(
+            images_raw)
+        masks_train, masks_eval, masks_test = split_data.split_data(
+            masks_raw)
 
-        labels = image_processing.masks_to_labels(masks, label=dataset)
+        # process raw images
+        images_train, masks_train = processor(
+            images_train, masks_train, output_size)
+        images_eval, masks_eval = processor(
+            images_eval, masks_eval, output_size)
+        images_test, masks_test = processor(
+            images_test, masks_test, output_size)
 
-        images_processed = np.concatenate([images_processed, images], axis=0)
-        labels_processed = np.concatenate([labels_processed, labels], axis=0)
+        # convert masks {0, 255} to label {0, 1, 2, 3}
+        labels_train = image_processing.masks_to_labels(
+            masks_train, label=dataset)
+        labels_eval = image_processing.masks_to_labels(
+            masks_eval, label=dataset)
+        labels_test = image_processing.masks_to_labels(
+            masks_test, label=dataset)
 
-    images_train, images_eval, images_test = split_data.split_data(
-        images_processed)
-    labels_train, labels_eval, labels_test = split_data.split_data(
-        labels_processed)
+        all_images_train = np.concatenate(
+            [all_images_train, images_train], axis=0)
+        all_labels_train = np.concatenate(
+            [all_labels_train, labels_train], axis=0)
+        all_images_eval = np.concatenate(
+            [all_images_eval, images_eval], axis=0)
+        all_labels_eval = np.concatenate(
+            [all_labels_eval, labels_eval], axis=0)
+        all_images_test = np.concatenate(
+            [all_images_test, images_test], axis=0)
+        all_labels_test = np.concatenate(
+            [all_labels_test, labels_test], axis=0)
 
-    _save_processed_data(images_train, labels_train,
-                         images_eval, labels_eval,
-                         images_test, labels_test)
-
-    # raw image/mask plot
-    fig = image_processing.plot_images_labels(images_raw, masks_raw)
-    repo_dir = os.path.dirname(__file__)
-    save_path = os.path.join(
-        repo_dir, 'data', 'brain_tumor_segmentation', 'raw')
-    fig.savefig(save_path, bbox_inches='tight')
+    _save_processed_data(all_images_train, all_labels_train,
+                         all_images_eval, all_labels_eval,
+                         all_images_test, all_labels_test)
 
     # processed image/mask plot
     fig = image_processing.plot_images_labels(
-        images_processed, labels_processed)
+        all_images_train, all_labels_train)
     repo_dir = os.path.dirname(__file__)
     save_path = os.path.join(
         repo_dir, 'data', 'brain_tumor_segmentation', 'processed')
@@ -191,4 +212,5 @@ def _get_images_masks(path: str, dataset: int):
 
 
 if __name__ == '__main__':
-    download_and_preprocess_data(output_size=256, output_type='resize')
+    download_and_preprocess_data(
+        output_size=256, output_type='resize')
