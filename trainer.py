@@ -41,7 +41,7 @@ class Trainer:
                 self.optimizer.step()
 
             loss_eval, fig = self.evaluate()
-            print('Epoch', epoch, '|', 'Evaluation Loss', loss_eval)
+            print('Epoch', epoch, '|', 'Validation Loss', loss_eval)
 
         torch.save(self.model.state_dict(), os.path.join('.', 'model.pth'))
 

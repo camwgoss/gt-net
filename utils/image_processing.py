@@ -74,7 +74,7 @@ def crop_images(images: list, masks: list = None, output_size: int = 256):
         masks: Must have identical dimensions to images.
         output_size: Dimension in pixels of square section to extract.
     Returns:
-        images_out: List of Numpy arrays containing image sections.
+        images_out: Numpy array (sample, row, col).
         masks_out: This will only be returned if masks were provided.
     '''
 
@@ -117,12 +117,12 @@ def resize_images(images: list, masks: list = None, output_size: int = 256):
     Resize images to a square with the specified resolution. Perform a centered
     square crop prior to resizing to prevent stretching.
     Arguments:
-        images: List of Numpy arrays, (row, column, [channel]).
+        images: List of Numpy arrays, (row, column).
         masks: Must have identical dimensions to images.
         output_size: Dimension in pixels of square section to extract.
     Returns:
-        image_sections: List of Numpy arrays containing image sections.
-        mask_sections: This will only be returned if masks were provided.
+        images_out: Numpy array (sample, row, col).
+        masks_out: This will only be returned if masks were provided.
     '''
 
     images_out = []
@@ -176,6 +176,50 @@ def resize_images(images: list, masks: list = None, output_size: int = 256):
         return images_out, masks_out
 
 
+def rotate_images(images: list, masks: list = None, output_size: int = 256):
+    '''
+    Randomly rotate images and then resize them to a square with the specified 
+    resolution. Random rotation angle standard deviation is 10 deg.
+    Arguments:
+        images: List of Numpy arrays, (row, column).
+        masks: Must have identical dimensions to images.
+        output_size: Dimension in pixels of square section to extract.
+    Returns:
+        image_sections: Numpy array (sample, row, col).
+        mask_sections: This will only be returned if masks were provided.
+    '''
+
+    images_out = []
+    masks_out = []
+
+    for ii in range(len(images)):
+        rotation_angle = np.random.normal(scale=10)
+
+        image = images[ii]
+        image = Image.fromarray(image)
+        image = image.rotate(rotation_angle)
+        image = np.array(image)
+        images_out.append(image)
+
+        if masks is not None:  # same processing as image
+            mask = masks[ii]
+            mask = Image.fromarray(mask)
+            mask = mask.rotate(rotation_angle)
+            mask = np.array(mask)
+            masks_out.append(mask)
+
+    if masks is None:
+        images_out = resize_images(images_out, output_size=output_size)
+        images_out = np.array(images_out)
+        return images_out
+    else:
+        images_out, masks_out = resize_images(
+            images_out, masks_out, output_size=output_size)
+        images_out = np.array(images_out)
+        masks_out = np.array(masks_out)
+        return images_out, masks_out
+
+
 def plot_images_labels(images: np.array, labels: np.array,
                        labels_predicted: np.array = None, num_samples=10):
     '''
@@ -209,10 +253,10 @@ def plot_images_labels(images: np.array, labels: np.array,
                              dpi=200, figsize=[columns, num_samples])
 
     # plot data
-    if type(labels) is np.array:
-        vmax = labels.max()  # np.array (sample, channel, row, col)
+    if type(labels) is np.ndarray:
+        vmax = labels.max()  # np.array (sample, row, col)
     else:
-        vmax = None  # list of np.array (channel, row, col)
+        vmax = None  # list of np.array (row, col)
 
     for ii in range(len(images_subset)):
         axes[ii, 0].imshow(images_subset[ii], cmap='inferno')
