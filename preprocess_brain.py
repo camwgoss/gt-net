@@ -118,10 +118,8 @@ def _save_processed_data(images_train, labels_train,
                          images_val, labels_val,
                          images_test, labels_test):
 
-    # oops, accidentally called validation set evaluation set; don't want
-    # to change as other group member scripts use these incorrect key names
     processed_data = {'images_train': images_train, 'labels_train': labels_train,
-                      'images_eval': images_val, 'labels_eval': labels_val,
+                      'images_val': images_val, 'labels_val': labels_val,
                       'images_test': images_test, 'labels_test': labels_test}
 
     repo_dir = os.path.dirname(__file__)

@@ -48,14 +48,14 @@ class Trainer:
                 loss.backward()
                 self.optimizer.step()
 
-            loss_eval, fig = self.evaluate()
-            print('Epoch', epoch, '|', 'Validation Loss', loss_eval)
+            loss_val, fig = self.validate()
+            print('Epoch', epoch, '|', 'Validation Loss', loss_val)
 
         torch.save(self.model.state_dict(), os.path.join('.', 'model.pth'))
 
-    def evaluate(self):
+    def validate(self):
         '''
-        Evaluate model performance. This function returns the loss defined by
+        Validate model performance. This function returns the loss defined by
         self.criterion as well as a figure of images, labels, and predictions.
         If model_path is not provided, self.model will be used.
         Returns:
@@ -64,10 +64,10 @@ class Trainer:
         '''
 
         with torch.no_grad():
-            data_eval = DataLoader(self.data_eval, batch_size=10, shuffle=True)
+            data_val = DataLoader(self.data_val, batch_size=10, shuffle=True)
             accumulated_loss = 0
             batch = 0
-            for images, labels in data_eval:
+            for images, labels in data_val:
 
                 images = images.to(self.device)
                 labels = labels.to(self.device)
@@ -86,7 +86,7 @@ class Trainer:
                     )
                 batch += 1
 
-            loss = accumulated_loss / len(self.data_eval)  # average loss
+            loss = accumulated_loss / len(self.data_val)  # average loss
 
         return loss, fig
 
@@ -102,17 +102,17 @@ class Trainer:
         # pre-processing during the color -> grayscale conversion
         images_train = torch.tensor(
             data['images_train'], dtype=torch.float32).unsqueeze(1)
-        images_eval = torch.tensor(
-            data['images_eval'], dtype=torch.float32).unsqueeze(1)
+        images_val = torch.tensor(
+            data['images_val'], dtype=torch.float32).unsqueeze(1)
         images_test = torch.tensor(
             data['images_test'], dtype=torch.float32).unsqueeze(1)
 
         labels_train = torch.tensor(data['labels_train'], dtype=torch.long)
-        labels_eval = torch.tensor(data['labels_eval'], dtype=torch.long)
+        labels_val = torch.tensor(data['labels_val'], dtype=torch.long)
         labels_test = torch.tensor(data['labels_test'], dtype=torch.long)
 
         self.data_train = TensorDataset(images_train, labels_train)
-        self.data_eval = TensorDataset(images_eval, labels_eval)
+        self.data_val = TensorDataset(images_val, labels_val)
         self.data_test = TensorDataset(images_test, labels_test)
 
 
@@ -127,4 +127,4 @@ if __name__ == '__main__':
     # model_dir = os.path.dirname(__file__)
     # model_path = os.path.join(model_dir, 'model.pth')
     # trainer.model.load_state_dict(torch.load(model_path))
-    # trainer.evaluate()
+    # trainer.validate()
