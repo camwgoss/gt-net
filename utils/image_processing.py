@@ -221,6 +221,63 @@ def rotate_images(images: list, masks: list = None, output_size: int = 256):
         return images_out, masks_out
 
 
+def elastically_deform_images (images: list, masks: list = None, output_size: int = 256):
+    '''
+    Randomly elastically deform images using bi-cubic interpolation. A cubic
+    function is fit to each row/column of a 4x4 grid of control points, where
+    each point's row and column pixel location is randomly shifted according to
+    a normal distribution with a 10 pixel standard deviation. A similar
+    approach and 10 pixel std was used in the original U-Net paper.
+    Arguments:
+        images: List of Numpy arrays, (row, column).
+        masks: Must have identical dimensions to images.
+        output_size: Dimension in pixels of square section to extract.
+    Returns:
+        image_sections: Numpy array (sample, row, col).
+        mask_sections: This will only be returned if masks were provided.
+    '''
+
+    for image in images:
+        original = Image.fromarray(image)
+        original.show()
+        
+        rows = image.shape[0]
+        cols = image.shape[1]
+        print(rows,cols)
+        grid_x = np.arange(0, rows, (rows-1)/3)
+        grid_y = np.arange(0, cols, (cols-1)/3)
+
+        std = 10  # pixels
+        deformation_x = std * np.random.randn(4)
+        deformation_y = std * np.random.randn(4)
+
+        # cubic polynomial coefficients [c3, c2, c1, c0] for c3*x^3 + c2*x^2 + c2*x^1 + c0*x^0
+        coeffs_x = np.polyfit(grid_x, deformation_x, deg=3)
+        coeffs_y = np.polyfit(grid_y, deformation_y, deg=3)
+
+        poly_x = np.poly1d(coeffs_x)
+        poly_y = np.poly1d(coeffs_y)
+
+        x = np.arange(0, rows)
+        y = np.arange(0, cols)
+
+        # some of these indices will be < 0 or > image rows/cols
+        x_shifted_raw = (x + poly_x(x)).astype(int)
+        y_shifted_raw = (y + poly_y(y)).astype(int)
+        
+        x_shifted = x_shifted_raw % rows
+        y_shifted = y_shifted_raw % cols
+        
+        image[x, :] = image[x_shifted, :]
+        image[x_shifted != x_shifted_raw, :] = 0
+        image[:, y] = image[:, y_shifted]
+        image[:, y_shifted != y_shifted_raw] = 0
+        
+        image = Image.fromarray(image)
+        image.show()
+        
+        break
+
 def plot_images_labels(images: np.array, labels: np.array,
                        labels_predicted: np.array = None, num_samples=10):
     '''
