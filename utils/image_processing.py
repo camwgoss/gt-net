@@ -2,6 +2,7 @@ import os
 from PIL import Image
 import numpy as np
 import matplotlib.pyplot as plt
+import torch
 
 
 def get_images(image_dir: str, grayscale=True):
@@ -253,7 +254,7 @@ def plot_images_labels(images: np.array, labels: np.array,
                              dpi=200, figsize=[columns, num_samples])
 
     # plot data
-    if type(labels) is np.ndarray:
+    if type(labels) is np.ndarray or type(labels) is torch.Tensor:
         vmax = labels.max()  # np.array (sample, row, col)
     else:
         vmax = None  # list of np.array (row, col)
