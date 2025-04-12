@@ -20,6 +20,7 @@ def download_and_preprocess_data(output_size: int = 256, augmentation=None):
         it with altered images.
             'crop': Randomly sample a square section of each image/mask.
             'rotate': Randomly rotated each image/mask.
+            'elastic_deformation': Random bi-cubic deformation.
     '''
 
     raw_path = _download_data()
@@ -75,6 +76,8 @@ def download_and_preprocess_data(output_size: int = 256, augmentation=None):
                 processor = ip.crop_images
             elif augmentation == 'rotate':
                 processor = ip.rotate_images
+            elif augmentation == 'elastic_deformation':
+                processor = ip.elastically_deform_images
             else:
                 raise Exception('Error: Unknown augmentation provided.')
 

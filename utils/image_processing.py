@@ -221,6 +221,116 @@ def rotate_images(images: list, masks: list = None, output_size: int = 256):
         return images_out, masks_out
 
 
+def elastically_deform_images(images: list, masks: list = None, output_size: int = 256):
+    '''
+    Randomly elastically deform images using bi-cubic interpolation. A cubic
+    function is fit to each row/column of a 4x4 grid of control points, where
+    each point's row and column pixel location is randomly shifted according to
+    a normal distribution with a 10 pixel standard deviation. A similar
+    approach and 10 pixel std was used in the original U-Net paper.
+    Arguments:
+        images: List of Numpy arrays, (row, column).
+        masks: Must have identical dimensions to images.
+        output_size: Dimension in pixels of square section to extract.
+    Returns:
+        image_sections: Numpy array (sample, row, col).
+        mask_sections: This will only be returned if masks were provided.
+    '''
+
+    images_out = []
+    masks_out = []
+
+    for ii in range(len(images)):
+        image = images[ii]
+
+        rows = image.shape[0]
+        cols = image.shape[1]
+
+        # X @ coefficients = deformations, where X is the polynomial matrix,
+        # coefficients is the coefficients for the row/col deformation,
+        # and deformations is the row/col deformations
+
+        x = np.arange(0, rows, (rows-1)/3)
+        x = np.repeat(x, 4)  # [1, 2] -> [1, 1, 2, 2]
+
+        y = np.arange(0, cols, (cols-1)/3)
+        y = np.tile(y, 4)  # [1, 2] -> [1, 2, 1, 2]
+
+        X = np.array([x**0*y**0, x**0*y**1, x**0*y**2, x**0*y**3,
+                      x**1*y**0, x**1*y**1, x**1*y**2, x**1*y**3,
+                      x**2*y**0, x**2*y**1, x**2*y**2, x**2*y**3,
+                      x**3*y**0, x**3*y**1, x**3*y**2, x**3*y**3]).T
+
+        std = 10  # pixels
+        deformations_row = std * np.random.randn(16)
+        deformations_col = std * np.random.randn(16)
+
+        # solve the linear system
+        coefficients_row = np.linalg.solve(X, deformations_row)
+        coefficients_col = np.linalg.solve(X, deformations_col)
+
+        # reshape coefficients for use with polyval2d
+        coefficients_row = coefficients_row.reshape([4, 4])
+        coefficients_col = coefficients_col.reshape([4, 4])
+
+        # all pixels
+        x_grid = np.arange(0, rows)
+        x_grid = np.repeat(x_grid, cols)  # [1, 2] -> [1, 1, 2, 2]
+        x_grid = np.reshape(x_grid, [rows, cols])
+
+        y_grid = np.arange(0, cols)
+        y_grid = np.tile(y_grid, rows)  # [1, 2] -> [1, 2, 1, 2]
+        y_grid = np.reshape(y_grid, [rows, cols])
+
+        # how much to shift each pixel
+        x_shift = np.polynomial.polynomial.polyval2d(
+            x_grid, y_grid, coefficients_row)
+        y_shift = np.polynomial.polynomial.polyval2d(
+            x_grid, y_grid, coefficients_col)
+
+        # some of these indices will be < 0 or > image rows/cols
+        x_shifted_raw = (x_grid + x_shift).astype(int)
+        y_shifted_raw = (y_grid + y_shift).astype(int)
+
+        # this is the actual amount to circle shift each row/col
+        x_shifted = x_shifted_raw % rows
+        y_shifted = y_shifted_raw % cols
+
+        # elastically deform rows/cols
+        image = image[x_shifted, y_grid]
+        image = image[x_grid, y_shifted]
+
+        # set circle-shifted data to black
+        image[y_shifted != y_shifted_raw] = 0
+        image[x_shifted != x_shifted_raw] = 0
+
+        images_out.append(image)
+
+        if masks is not None:  # same processing as image
+            mask = masks[ii]
+
+            # elastically deform rows/cols
+            mask = mask[x_shifted, y_grid]
+            mask = mask[x_grid, y_shifted]
+
+            # set circle-shifted data to black
+            mask[y_shifted != y_shifted_raw] = 0
+            mask[x_shifted != x_shifted_raw] = 0
+
+            masks_out.append(mask)
+
+    if masks is None:
+        images_out = resize_images(images_out, output_size=output_size)
+        images_out = np.array(images_out)
+        return images_out
+    else:
+        images_out, masks_out = resize_images(
+            images_out, masks_out, output_size=output_size)
+        images_out = np.array(images_out)
+        masks_out = np.array(masks_out)
+        return images_out, masks_out
+
+
 def plot_images_labels(images: np.array, labels: np.array,
                        labels_predicted: np.array = None, num_samples=10):
     '''
