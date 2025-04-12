@@ -261,7 +261,7 @@ def elastically_deform_images(images: list, masks: list = None, output_size: int
                       x**2*y**0, x**2*y**1, x**2*y**2, x**2*y**3,
                       x**3*y**0, x**3*y**1, x**3*y**2, x**3*y**3]).T
 
-        std = 10  # pixels
+        std = 20  # pixels
         deformations_row = std * np.random.randn(16)
         deformations_col = std * np.random.randn(16)
 
@@ -296,26 +296,20 @@ def elastically_deform_images(images: list, masks: list = None, output_size: int
         x_shifted = x_shifted_raw % rows
         y_shifted = y_shifted_raw % cols
 
-        # elastically deform rows/cols
-        image = image[x_shifted, y_grid]
+        image = image[x_shifted, y_grid]  # elastically deform rows/cols
+        image[x_shifted != x_shifted_raw] = 0  # circle-shifted data black
         image = image[x_grid, y_shifted]
-
-        # set circle-shifted data to black
         image[y_shifted != y_shifted_raw] = 0
-        image[x_shifted != x_shifted_raw] = 0
 
         images_out.append(image)
 
         if masks is not None:  # same processing as image
             mask = masks[ii]
 
-            # elastically deform rows/cols
-            mask = mask[x_shifted, y_grid]
+            mask = mask[x_shifted, y_grid]  # elastically deform rows/cols
+            mask[x_shifted != x_shifted_raw] = 0  # circle-shifted data black
             mask = mask[x_grid, y_shifted]
-
-            # set circle-shifted data to black
             mask[y_shifted != y_shifted_raw] = 0
-            mask[x_shifted != x_shifted_raw] = 0
 
             masks_out.append(mask)
 
