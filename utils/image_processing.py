@@ -267,19 +267,26 @@ def elastically_deform_images(images: list, masks: list = None, output_size: int
         coefficients_row = np.linalg.solve(X, deformations_row)
         coefficients_col = np.linalg.solve(X, deformations_col)
 
-        # reshape coefficients for use with polygrid2d
+        # reshape coefficients for use with polyval2d
         coefficients_row = coefficients_row.reshape([4, 4])
         coefficients_col = coefficients_col.reshape([4, 4])
 
         # all pixels
         x_grid = np.arange(0, rows)
+        x_grid = np.repeat(x_grid, cols)  # [1, 2] -> [1, 1, 2, 2]
+        x_grid = np.reshape(x_grid, [rows, cols])
+        
         y_grid = np.arange(0, cols)
+        y_grid = np.tile(y_grid, rows)  # [1, 2] -> [1, 2, 1, 2]
+        y_grid = np.reshape(y_grid, [rows, cols])
 
         # how much to shift each pixel
-        x_shift = np.polynomial.polynomial.polygrid2d(
+        x_shift = np.polynomial.polynomial.polyval2d(
             x_grid, y_grid, coefficients_row)
-        y_shift = np.polynomial.polynomial.polygrid2d(
+        y_shift = np.polynomial.polynomial.polyval2d(
             x_grid, y_grid, coefficients_col)
+        
+        print(x_shift.shape, y_shift.shape)
 
         # some of these indices will be < 0 or > image rows/cols
         x_shifted_raw = (x_grid + x_shift).astype(int)
@@ -290,12 +297,12 @@ def elastically_deform_images(images: list, masks: list = None, output_size: int
         y_shifted = y_shifted_raw % cols
 
         # elastically deform rows
-        image = image[x_shifted, np.repeat(y_grid, cols).reshape(rows, cols)]
+        image = image[x_shifted, y_grid]
         image[x_shifted != x_shifted_raw] = 0
-        
-        # elastically deform cols
-        image = image.T[np.tile(x_grid, rows).reshape(rows, cols), y_shifted.T]
-        image[y_shifted.T != y_shifted_raw.T] = 0
+
+        # # elastically deform cols
+        image = image[x_grid, y_shifted]
+        image[y_shifted != y_shifted_raw] = 0
 
         image = Image.fromarray(image)
         image.show()
