@@ -221,7 +221,7 @@ def rotate_images(images: list, masks: list = None, output_size: int = 256):
         return images_out, masks_out
 
 
-def elastically_deform_images (images: list, masks: list = None, output_size: int = 256):
+def elastically_deform_images(images: list, masks: list = None, output_size: int = 256):
     '''
     Randomly elastically deform images using bi-cubic interpolation. A cubic
     function is fit to each row/column of a 4x4 grid of control points, where
@@ -240,43 +240,68 @@ def elastically_deform_images (images: list, masks: list = None, output_size: in
     for image in images:
         original = Image.fromarray(image)
         original.show()
-        
+
         rows = image.shape[0]
         cols = image.shape[1]
-        print(rows,cols)
-        grid_x = np.arange(0, rows, (rows-1)/3)
-        grid_y = np.arange(0, cols, (cols-1)/3)
+
+        # X @ coefficients = deformations, where X is the polynomial matrix,
+        # coefficients is the coefficients for the row/col deformation,
+        # and deformations is the row/col deformations
+
+        x = np.arange(0, rows, (rows-1)/3)
+        x = np.repeat(x, 4)  # [1, 2] -> [1, 1, 2, 2]
+
+        y = np.arange(0, cols, (cols-1)/3)
+        y = np.tile(y, 4)  # [1, 2] -> [1, 2, 1, 2]
+
+        X = np.array([x**0*y**0, x**0*y**1, x**0*y**2, x**0*y**3,
+                      x**1*y**0, x**1*y**1, x**1*y**2, x**1*y**3,
+                      x**2*y**0, x**2*y**1, x**2*y**2, x**2*y**3,
+                      x**3*y**0, x**3*y**1, x**3*y**2, x**3*y**3]).T
 
         std = 10  # pixels
-        deformation_x = std * np.random.randn(4)
-        deformation_y = std * np.random.randn(4)
+        deformations_row = std * np.random.randn(16)
+        deformations_col = std * np.random.randn(16)
 
-        # cubic polynomial coefficients [c3, c2, c1, c0] for c3*x^3 + c2*x^2 + c2*x^1 + c0*x^0
-        coeffs_x = np.polyfit(grid_x, deformation_x, deg=3)
-        coeffs_y = np.polyfit(grid_y, deformation_y, deg=3)
+        # solve the linear system
+        coefficients_row = np.linalg.solve(X, deformations_row)
+        coefficients_col = np.linalg.solve(X, deformations_col)
 
-        poly_x = np.poly1d(coeffs_x)
-        poly_y = np.poly1d(coeffs_y)
+        # reshape coefficients for use with polygrid2d
+        coefficients_row = coefficients_row.reshape([4, 4])
+        coefficients_col = coefficients_col.reshape([4, 4])
 
-        x = np.arange(0, rows)
-        y = np.arange(0, cols)
+        # all pixels
+        x_grid = np.arange(0, rows)
+        y_grid = np.arange(0, cols)
+
+        # how much to shift each pixel
+        x_shift = np.polynomial.polynomial.polygrid2d(
+            x_grid, y_grid, coefficients_row)
+        y_shift = np.polynomial.polynomial.polygrid2d(
+            x_grid, y_grid, coefficients_col)
 
         # some of these indices will be < 0 or > image rows/cols
-        x_shifted_raw = (x + poly_x(x)).astype(int)
-        y_shifted_raw = (y + poly_y(y)).astype(int)
-        
+        x_shifted_raw = (x_grid + x_shift).astype(int)
+        y_shifted_raw = (y_grid + y_shift).astype(int)
+
+        # this is the actual amount to circle shift each row/col
         x_shifted = x_shifted_raw % rows
         y_shifted = y_shifted_raw % cols
+
+        # elastically deform rows
+        image = image[x_shifted, np.repeat(y_grid, cols).reshape(rows, cols)]
+        image[x_shifted != x_shifted_raw] = 0
         
-        image[x, :] = image[x_shifted, :]
-        image[x_shifted != x_shifted_raw, :] = 0
-        image[:, y] = image[:, y_shifted]
-        image[:, y_shifted != y_shifted_raw] = 0
-        
+        # elastically deform cols
+        image = image.T[np.tile(x_grid, rows).reshape(rows, cols), y_shifted.T]
+        image[y_shifted.T != y_shifted_raw.T] = 0
+
         image = Image.fromarray(image)
         image.show()
-        
+
         break
+
 
 def plot_images_labels(images: np.array, labels: np.array,
                        labels_predicted: np.array = None, num_samples=10):
