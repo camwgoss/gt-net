@@ -237,9 +237,11 @@ def elastically_deform_images(images: list, masks: list = None, output_size: int
         mask_sections: This will only be returned if masks were provided.
     '''
 
-    for image in images:
-        original = Image.fromarray(image)
-        original.show()
+    images_out = []
+    masks_out = []
+
+    for ii in range(len(images)):
+        image = images[ii]
 
         rows = image.shape[0]
         cols = image.shape[1]
@@ -275,7 +277,7 @@ def elastically_deform_images(images: list, masks: list = None, output_size: int
         x_grid = np.arange(0, rows)
         x_grid = np.repeat(x_grid, cols)  # [1, 2] -> [1, 1, 2, 2]
         x_grid = np.reshape(x_grid, [rows, cols])
-        
+
         y_grid = np.arange(0, cols)
         y_grid = np.tile(y_grid, rows)  # [1, 2] -> [1, 2, 1, 2]
         y_grid = np.reshape(y_grid, [rows, cols])
@@ -285,8 +287,6 @@ def elastically_deform_images(images: list, masks: list = None, output_size: int
             x_grid, y_grid, coefficients_row)
         y_shift = np.polynomial.polynomial.polyval2d(
             x_grid, y_grid, coefficients_col)
-        
-        print(x_shift.shape, y_shift.shape)
 
         # some of these indices will be < 0 or > image rows/cols
         x_shifted_raw = (x_grid + x_shift).astype(int)
@@ -296,18 +296,39 @@ def elastically_deform_images(images: list, masks: list = None, output_size: int
         x_shifted = x_shifted_raw % rows
         y_shifted = y_shifted_raw % cols
 
-        # elastically deform rows
+        # elastically deform rows/cols
         image = image[x_shifted, y_grid]
+        image = image[x_grid, y_shifted]
+
+        # set circle-shifted data to black
+        image[y_shifted != y_shifted_raw] = 0
         image[x_shifted != x_shifted_raw] = 0
 
-        # # elastically deform cols
-        image = image[x_grid, y_shifted]
-        image[y_shifted != y_shifted_raw] = 0
+        images_out.append(image)
 
-        image = Image.fromarray(image)
-        image.show()
+        if masks is not None:  # same processing as image
+            mask = masks[ii]
 
-        break
+            # elastically deform rows/cols
+            mask = mask[x_shifted, y_grid]
+            mask = mask[x_grid, y_shifted]
+
+            # set circle-shifted data to black
+            mask[y_shifted != y_shifted_raw] = 0
+            mask[x_shifted != x_shifted_raw] = 0
+
+            masks_out.append(mask)
+
+    if masks is None:
+        images_out = resize_images(images_out, output_size=output_size)
+        images_out = np.array(images_out)
+        return images_out
+    else:
+        images_out, masks_out = resize_images(
+            images_out, masks_out, output_size=output_size)
+        images_out = np.array(images_out)
+        masks_out = np.array(masks_out)
+        return images_out, masks_out
 
 
 def plot_images_labels(images: np.array, labels: np.array,
