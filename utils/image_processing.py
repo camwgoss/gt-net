@@ -261,7 +261,7 @@ def elastically_deform_images(images: list, masks: list = None, output_size: int
                       x**2*y**0, x**2*y**1, x**2*y**2, x**2*y**3,
                       x**3*y**0, x**3*y**1, x**3*y**2, x**3*y**3]).T
 
-        std = 20  # pixels
+        std = 10  # pixels
         deformations_row = std * np.random.randn(16)
         deformations_col = std * np.random.randn(16)
 
