@@ -7,7 +7,9 @@ import utils.image_processing as ip
 import utils.split_data as split_data
 
 
-def download_and_preprocess_data(output_size: int = 256, augmentation=None):
+def download_and_preprocess_data(output_size: int = 256,
+                                 augmentation: str = None,
+                                 augmentation_sets: int = 1):
     '''
     Download and preprocess the brain tumor segmentation dataset from
     https://www.kaggle.com/datasets/atikaakter11/brain-tumor-segmentation-dataset
@@ -16,11 +18,11 @@ def download_and_preprocess_data(output_size: int = 256, augmentation=None):
     Parameters
         output_size: These images are large and can take a long time to train 
         on. Select output size in pixels for the square output.
-        augmentation: This will roughly double the dataset size by augmenting 
-        it with altered images.
+        augmentation: Produce an augmented training sample for each raw training sample.
             'crop': Randomly sample a square section of each image/mask.
             'rotate': Randomly rotated each image/mask.
             'elastic_deformation': Random bi-cubic deformation.
+        augmentation_sets: Number of augmented samples for each raw sample.
     '''
 
     raw_path = _download_data()
@@ -71,24 +73,25 @@ def download_and_preprocess_data(output_size: int = 256, augmentation=None):
         all_labels_test = np.concatenate(
             [all_labels_test, labels_test], axis=0)
 
-        if augmentation is not None:  # augment training dataset
-            if augmentation == 'crop':
-                processor = ip.crop_images
-            elif augmentation == 'rotate':
-                processor = ip.rotate_images
-            elif augmentation == 'elastic_deformation':
-                processor = ip.elastically_deform_images
-            else:
-                raise Exception('Error: Unknown augmentation provided.')
+        if augmentation is not None:  # augment training data
+            for aa in range(augmentation_sets):  # each augmented sample
+                if augmentation == 'crop':
+                    processor = ip.crop_images
+                elif augmentation == 'rotate':
+                    processor = ip.rotate_images
+                elif augmentation == 'elastic_deformation':
+                    processor = ip.elastically_deform_images
+                else:
+                    raise Exception('Error: Unknown augmentation provided.')
 
-            images_train, masks_train = processor(
-                images_train_raw, masks_train_raw)
-            labels_train = ip.masks_to_labels(masks_train, label=dataset)
+                images_train, masks_train = processor(
+                    images_train_raw, masks_train_raw)
+                labels_train = ip.masks_to_labels(masks_train, label=dataset)
 
-            all_images_train = np.concatenate(
-                [all_images_train, images_train], axis=0)
-            all_labels_train = np.concatenate(
-                [all_labels_train, labels_train], axis=0)
+                all_images_train = np.concatenate(
+                    [all_images_train, images_train], axis=0)
+                all_labels_train = np.concatenate(
+                    [all_labels_train, labels_train], axis=0)
 
     _save_processed_data(all_images_train, all_labels_train,
                          all_images_val, all_labels_val,

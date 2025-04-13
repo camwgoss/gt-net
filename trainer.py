@@ -4,6 +4,7 @@ import torch
 from torch.utils.data import DataLoader, TensorDataset
 import os
 import segmentation_models_pytorch
+import numpy as np
 
 import utils.image_processing as image_processing
 
@@ -14,34 +15,39 @@ class Trainer:
     If multi-channel is desired, modify _load_data to not unsqueeze(-).
     Arguments:
         dataset: Dateset to run on, {'brain', 'liver', 'coco'}.
+        lr: Learning rate.
         device: Compute device, {'cuda', 'cpu'}.
+        save_name: Save name for model and validation losses
     '''
 
-    def __init__(self, dataset: str = 'brain', device: str = 'cpu'):
+    def __init__(self, dataset: str = 'brain', lr: float = 1e-5,
+                 device: str = 'cpu', save_name='model'):
         self.device = device
         print('Using device:', device)
 
-        if dataset=='brain':
+        self.save_name = save_name
+
+        if dataset == 'brain':
             model = segmentation_models_pytorch.Unet(in_channels=1, classes=4)
-        elif dataset=='liver':
-            model = segmentation_models_pytorch.Unet(in_channels = 1, classes=2)
-        
+        elif dataset == 'liver':
+            model = segmentation_models_pytorch.Unet(in_channels=1, classes=2)
+
         self.model = model.to(device)
 
         self.criterion = segmentation_models_pytorch.losses.DiceLoss(
             mode='multiclass')
 
-        self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=1e-5)
+        self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=lr)
 
-        # TODO this is hard coded to load brain tumor data
         self._load_data(dataset)
 
     def train(self):
-        batch_size = 1
-        data_train = DataLoader(
-            self.data_train, batch_size=batch_size, shuffle=True)
         epochs = 10
+        losses_val = []  # store losses and save to file after training
         for epoch in range(epochs):
+
+            data_train = DataLoader(
+                self.data_train, batch_size=1, shuffle=True)
             for images, labels in data_train:
 
                 images = images.to(self.device)
@@ -54,9 +60,15 @@ class Trainer:
                 self.optimizer.step()
 
             loss_val, fig = self.validate()
+            losses_val.append(loss_val)
             print('Epoch', epoch, '|', 'Validation Loss', loss_val)
 
-        torch.save(self.model.state_dict(), os.path.join('.', 'model.pth'))
+        # save data
+        os.makedirs('experiments', exist_ok=True)
+        np.savetxt(os.path.join('.', 'experiments', self.save_name + '_validation_loss.txt'),
+                   losses_val)  # validation loss data
+        torch.save(self.model.state_dict(),  # model data
+                   os.path.join('.', 'experiments', self.save_name + '.pth'))
 
     def validate(self):
         '''
@@ -136,7 +148,7 @@ class Trainer:
 
 if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    trainer = Trainer(dataset='liver',device=device)
+    trainer = Trainer(device=device)
 
     # train from scratch
     trainer.train()
