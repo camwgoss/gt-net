@@ -21,11 +21,11 @@ class Trainer:
         self.device = device
         print('Using device:', device)
 
-        if dataset=='brain':
+        if dataset == 'brain':
             model = segmentation_models_pytorch.Unet(in_channels=1, classes=4)
-        elif dataset=='liver':
-            model = segmentation_models_pytorch.Unet(in_channels = 1, classes=2)
-        
+        elif dataset == 'liver':
+            model = segmentation_models_pytorch.Unet(in_channels=1, classes=2)
+
         self.model = model.to(device)
 
         self.criterion = segmentation_models_pytorch.losses.DiceLoss(
@@ -37,11 +37,12 @@ class Trainer:
         self._load_data(dataset)
 
     def train(self):
-        batch_size = 1
-        data_train = DataLoader(
-            self.data_train, batch_size=batch_size, shuffle=True)
+
         epochs = 10
         for epoch in range(epochs):
+
+            data_train = DataLoader(
+                self.data_train, batch_size=1, shuffle=True)
             for images, labels in data_train:
 
                 images = images.to(self.device)
@@ -136,7 +137,7 @@ class Trainer:
 
 if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    trainer = Trainer(dataset='liver',device=device)
+    trainer = Trainer(device=device)
 
     # train from scratch
     trainer.train()
