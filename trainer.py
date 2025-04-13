@@ -26,13 +26,13 @@ class Trainer:
         self.criterion = segmentation_models_pytorch.losses.DiceLoss(
             mode='multiclass')
 
-        self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=1e-4)
+        self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=1e-5)
 
         # TODO this is hard coded to load brain tumor data
         self._load_data(dataset)
 
     def train(self):
-        batch_size = 1  # batch size used in original U-Net paper
+        batch_size = 1
         data_train = DataLoader(
             self.data_train, batch_size=batch_size, shuffle=True)
         epochs = 10
@@ -65,6 +65,9 @@ class Trainer:
 
         data_val = DataLoader(self.data_val, batch_size=1, shuffle=True)
         accumulated_loss = 0
+
+        all_images = []
+        all_labels = []
         all_predictions = []
 
         for images, labels in data_val:
@@ -74,6 +77,9 @@ class Trainer:
 
             with torch.no_grad():
                 labels_predicted = self.model(images)
+
+            all_images.append(images)
+            all_labels.append(labels)
             all_predictions.append(labels_predicted)
 
             batch_loss = self.criterion(labels_predicted, labels)
@@ -81,9 +87,10 @@ class Trainer:
 
         loss = accumulated_loss / len(self.data_val)  # average loss
 
-        # figure
+        all_images = torch.cat(all_images, dim=0)
+        all_labels = torch.cat(all_labels, dim=0)
         all_predictions = torch.cat(all_predictions, dim=0)  # list -> tensor
-        all_images, all_labels = self.data_val[:]
+
         fig = image_processing.plot_images_labels(
             # squeeze out grayscale channel
             images=all_images.squeeze(1).to('cpu'),
