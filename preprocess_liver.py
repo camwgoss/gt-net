@@ -63,7 +63,7 @@ def download_and_preprocess_data(output_size: int = 256, output_type='crop'):
         images_test, masks_test = processor(
             images_test, masks_test, output_size)
     
-        # convert masks {0, 255} to labels {0, 1, 2, 3}
+        # convert masks {0, 255} to labels {0, 1}
         labels_train = image_processing.masks_to_labels(
             masks_train, label=dataset)
         labels_val = image_processing.masks_to_labels(
@@ -75,15 +75,15 @@ def download_and_preprocess_data(output_size: int = 256, output_type='crop'):
         final_images_train = np.concatenate(
             [final_images_train, images_train], axis=0)
         final_masks_train = np.concatenate(
-            [final_masks_train, masks_train], axis=0)
+            [final_masks_train, labels_train], axis=0)
         final_images_val = np.concatenate(
             [final_images_val, images_val], axis=0)
         final_masks_val = np.concatenate(
-            [final_masks_val, masks_val], axis=0)
+            [final_masks_val, labels_val], axis=0)
         final_images_test = np.concatenate(
             [final_images_test, images_test], axis=0)
         final_masks_test = np.concatenate(
-            [final_masks_test, masks_test], axis=0)
+            [final_masks_test, labels_test], axis=0)
 
     
     _save_processed_data(final_images_train, final_masks_train,
