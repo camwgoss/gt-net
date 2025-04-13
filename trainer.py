@@ -37,7 +37,7 @@ class Trainer:
         self._load_data(dataset)
 
     def train(self):
-        batch_size = 1  # batch size used in original U-Net paper
+        batch_size = 1
         data_train = DataLoader(
             self.data_train, batch_size=batch_size, shuffle=True)
         epochs = 10
@@ -68,30 +68,41 @@ class Trainer:
             fig: Plot showing images, labels, and predictions
         '''
 
-        with torch.no_grad():
-            data_val = DataLoader(self.data_val, batch_size=10, shuffle=True)
-            accumulated_loss = 0
-            batch = 0
-            for images, labels in data_val:
+        data_val = DataLoader(self.data_val, batch_size=1, shuffle=True)
+        accumulated_loss = 0
 
-                images = images.to(self.device)
-                labels = labels.to(self.device)
+        all_images = []
+        all_labels = []
+        all_predictions = []
+
+        for images, labels in data_val:
+
+            images = images.to(self.device)
+            labels = labels.to(self.device)
+
+            with torch.no_grad():
                 labels_predicted = self.model(images)
 
-                batch_loss = self.criterion(labels_predicted, labels)
-                # scale loss by number of samples in batch
-                accumulated_loss += batch_loss.item() * len(images)
+            all_images.append(images)
+            all_labels.append(labels)
+            all_predictions.append(labels_predicted)
 
-                if batch == 0:  # only plot first batch of data
-                    fig = image_processing.plot_images_labels(
-                        images=images.squeeze(1).to('cpu'),
-                        labels=labels.to('cpu'),
-                        labels_predicted=torch.argmax(
-                            labels_predicted, dim=1).to('cpu')
-                    )
-                batch += 1
+            batch_loss = self.criterion(labels_predicted, labels)
+            accumulated_loss += batch_loss.item()
 
-            loss = accumulated_loss / len(self.data_val)  # average loss
+        loss = accumulated_loss / len(self.data_val)  # average loss
+
+        all_images = torch.cat(all_images, dim=0)
+        all_labels = torch.cat(all_labels, dim=0)
+        all_predictions = torch.cat(all_predictions, dim=0)  # list -> tensor
+
+        fig = image_processing.plot_images_labels(
+            # squeeze out grayscale channel
+            images=all_images.squeeze(1).to('cpu'),
+            labels=all_labels.to('cpu'),
+            # argmax to get hard labels
+            labels_predicted=torch.argmax(all_predictions, dim=1).to('cpu')
+        )
 
         return loss, fig
 
