@@ -49,6 +49,26 @@ def threshold_masks(masks):
         mask[mask >= 128] = 255
     return masks
 
+def liver_threshold_masks(masks):
+    '''
+    
+    The subset of images all contain portion of liver and in some cases liver and tumor.
+    If the image just contains liver then the liver is at 255. If a tumor is included then liver is a 127 and tumor is at 255.
+    Need to standardize the masks so that livers are blank and tumors are 255.
+    
+    Arguments:
+        masks: List of Numpy arrays, (row, column)
+    Returns:
+        masks: Thresholded masks, (row, column)
+    '''
+    for mask in masks:
+        distinct_val = len(np.unique(mask))
+        if distinct_val==2:
+            mask[mask<256]=0
+        else:
+            mask[mask<128]=0
+            mask[mask>=128]=255
+    return masks
 
 def masks_to_labels(masks, label: int):
     '''

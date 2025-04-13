@@ -1,4 +1,5 @@
 import preprocess_brain
+import preprocess_liver
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 import os
@@ -20,7 +21,11 @@ class Trainer:
         self.device = device
         print('Using device:', device)
 
-        model = segmentation_models_pytorch.Unet(in_channels=1, classes=4)
+        if dataset=='brain':
+            model = segmentation_models_pytorch.Unet(in_channels=1, classes=4)
+        elif dataset=='liver':
+            model = segmentation_models_pytorch.Unet(in_channels = 1, classes=2)
+        
         self.model = model.to(device)
 
         self.criterion = segmentation_models_pytorch.losses.DiceLoss(
@@ -93,6 +98,8 @@ class Trainer:
     def _load_data(self, dataset: str = 'brain'):
         if dataset == 'brain':
             data = preprocess_brain.load_processed_data()
+        elif dataset == 'liver':
+            data = preprocess_liver.load_processed_data()
         else:
             raise Exception('Error: the ' + dataset +
                             ' dataset has not been implemented.')
@@ -118,7 +125,7 @@ class Trainer:
 
 if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    trainer = Trainer(device=device)
+    trainer = Trainer(dataset='liver',device=device)
 
     # train from scratch
     trainer.train()
