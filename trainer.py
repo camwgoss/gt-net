@@ -26,13 +26,13 @@ class Trainer:
         self.criterion = segmentation_models_pytorch.losses.DiceLoss(
             mode='multiclass')
 
-        self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=1e-5)
+        self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=1e-4)
 
         # TODO this is hard coded to load brain tumor data
         self._load_data(dataset)
 
     def train(self):
-        batch_size = 16  # use a larger batch size to achieve smoother gradient
+        batch_size = 1  # batch size used in original U-Net paper
         data_train = DataLoader(
             self.data_train, batch_size=batch_size, shuffle=True)
         epochs = 10
