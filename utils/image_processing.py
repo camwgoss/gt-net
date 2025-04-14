@@ -346,7 +346,7 @@ def elastically_deform_images(images: list, masks: list = None, output_size: int
 
 
 def plot_images_labels(images: np.array, labels: np.array,
-                       labels_predicted: np.array = None, num_samples=10):
+                       labels_predicted: np.array = None, num_samples=8):
     '''
     Plot images and labels side by side. Can optionally plot predicted labels.
     Arguments:
