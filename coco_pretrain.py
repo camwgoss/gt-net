@@ -12,7 +12,7 @@ import io
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import segmentation_models_pytorch as smp
-
+import json
 
 class COCOSegmentationDataset(Dataset):
     def __init__(self, coco_api, category_ids, transform=None, target_transform=None):
@@ -73,13 +73,18 @@ class COCOSegmentationDataset(Dataset):
     def __len__(self):
         return len(self.img_ids)
 
-def train_model(model, dataloader, criterion, optimizer, device, num_epoch=10):
+def train_model(model, dataloader, criterion, optimizer, device, start_epoch=0, num_epochs=10,
+                checkpoint_dir='./checkpoints', model_prefix='unet_coco', save_every=1):
     '''Train UNet model on COCO categories'''
     model.train()
     epoch_losses = []
-    for epoch in range(num_epoch):
+
+    # Create checkpoints directory if it doesn't exist
+    os.makedirs(checkpoint_dir, exist_ok=True)
+
+    for epoch in range(start_epoch, start_epoch + num_epochs):
         total_loss = 0.0
-        progress_bar = tqdm(dataloader, desc=f'Epoch {epoch + 1}/{num_epoch}') # Print progress bar
+        progress_bar = tqdm(dataloader, desc=f'Epoch {epoch + 1}/{start_epoch + num_epochs}') # Print progress bar
 
         for images, masks in progress_bar:
             images, masks = images.to(device), masks.to(device)
@@ -100,20 +105,50 @@ def train_model(model, dataloader, criterion, optimizer, device, num_epoch=10):
 
         epoch_loss = total_loss / len(dataloader)
         epoch_losses.append(epoch_loss)
-        print(f'Epoch {epoch + 1}/{num_epoch}; Loss: {epoch_loss:.4f}')
+        print(f'Epoch {epoch + 1}/{start_epoch + num_epochs}; Loss: {epoch_loss:.4f}')
+
+        # Save checkpoint after each epoch or at specified interval
+        if (epoch + 1) % save_every == 0:
+            checkpoint_path = os.path.join(checkpoint_dir, f'{model_prefix}_epoch{epoch + 1}.pth')
+
+            # Save model state and optimizer state for proper resuming
+            checkpoint = {
+                'epoch': epoch + 1,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'loss': epoch_loss,
+                'all_losses': epoch_losses
+            }
+
+            torch.save(checkpoint, checkpoint_path)
+            print(f'Checkpoint saved at {checkpoint_path}')
+
+            # Also save a metadata file to track progress
+            metadata_path = os.path.join(checkpoint_dir, f'{model_prefix}_metadata.json')
+            metadata = {
+                'latest_epoch': epoch + 1,
+                'total_epochs': start_epoch + num_epochs,
+                'losses': epoch_losses
+            }
+
+            with open(metadata_path, 'w') as f:
+                json.dump(metadata, f)
 
     return epoch_losses
 
+
 def pretrain_coco(coco_api_url='http://images.cocodataset.org/annotations/annotations_trainval2017.zip',
-                    annotation_file='instances_train2017.json',
-                    input_channels=1,
-                    batch_size=8,
-                    learning_rate=1e-4,
-                    num_epochs=10,
-                    save_path='unet_coco_pretrained.pth',
-                    category_ids=None):
+                  annotation_file='instances_train2017.json',
+                  input_channels=1,
+                  batch_size=8,
+                  learning_rate=1e-4,
+                  num_epochs=1,  # Default to 1 epoch per run
+                  checkpoint_dir='./checkpoints',
+                  model_prefix='unet_coco',
+                  category_ids=None,
+                  resume_from=None):  # New parameter to load from previous checkpoint
     '''
-        Pretrain UNet on COCO dataset using segmentation_models_pytorch
+        Pretrain UNet on COCO dataset using segmentation_models_pytorch with checkpointing
 
         Args:
             coco_api_url: URL to COCO annotations
@@ -121,8 +156,11 @@ def pretrain_coco(coco_api_url='http://images.cocodataset.org/annotations/annota
             input_channels: Number of input channels (1 for grayscale, 3 for RGB)
             batch_size: Batch size for training
             learning_rate: Learning rate
-            num_epochs: Number of training epochs
-            save_path: Path to save the pretrained model
+            num_epochs: Number of training epochs per run
+            checkpoint_dir: Directory to save checkpoints
+            model_prefix: Prefix for saved model files
+            category_ids: Category IDs to use for segmentation
+            resume_from: Path to checkpoint to resume from (if None, start fresh)
     '''
     # Set device
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -161,65 +199,127 @@ def pretrain_coco(coco_api_url='http://images.cocodataset.org/annotations/annota
     # Create dataloader
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4)
 
-    # Initialize model from segmentation_models_pytorch
-    if input_channels == 1:
-        # For grayscale we need to modify the first layer of the encoder
-        model = smp.Unet(
-            encoder_name="resnet34",  # Choose encoder, resnet34 is a good default
-            encoder_weights="imagenet",  # Use pre-trained weights
-            in_channels=3,  # Initially 3 channels (will modify)
-            classes=1,  # Binary segmentation
-        )
+    # Initialize model or load from checkpoint
+    start_epoch = 0
+    all_losses = []
 
-        # Replace first conv layer to accept grayscale images
-        # Get first conv layer weights
-        first_conv_weights = model.encoder.conv1.weight.data
+    # Check if we're resuming from checkpoint
+    if resume_from:
+        if os.path.exists(resume_from):
+            print(f"Loading model from checkpoint: {resume_from}")
+            checkpoint = torch.load(resume_from, map_location=device)
 
-        # Create new layer with 1 input channel but keeping the same output channels
-        new_conv = nn.Conv2d(
-            1, model.encoder.conv1.out_channels,
-            kernel_size=model.encoder.conv1.kernel_size,
-            stride=model.encoder.conv1.stride,
-            padding=model.encoder.conv1.padding,
-            bias=False if model.encoder.conv1.bias is None else True
-        )
+            # Initialize a fresh model first
+            if input_channels == 1:
+                # For grayscale
+                model = smp.Unet(
+                    encoder_name="resnet34",
+                    encoder_weights="imagenet",
+                    in_channels=3,  # Initially 3 channels (will modify)
+                    classes=1,
+                )
 
-        # Average the weights across the RGB channels
-        new_conv.weight.data = torch.mean(first_conv_weights, dim=1, keepdim=True)
+                # Replace first conv layer for grayscale
+                first_conv_weights = model.encoder.conv1.weight.data
+                new_conv = nn.Conv2d(
+                    1, model.encoder.conv1.out_channels,
+                    kernel_size=model.encoder.conv1.kernel_size,
+                    stride=model.encoder.conv1.stride,
+                    padding=model.encoder.conv1.padding,
+                    bias=False if model.encoder.conv1.bias is None else True
+                )
+                new_conv.weight.data = torch.mean(first_conv_weights, dim=1, keepdim=True)
+                model.encoder.conv1 = new_conv
+            else:
+                # For RGB
+                model = smp.Unet(
+                    encoder_name="resnet34",
+                    encoder_weights="imagenet",
+                    in_channels=3,
+                    classes=1,
+                )
 
-        # Replace the first conv layer
-        model.encoder.conv1 = new_conv
-    else:
-        # For RGB, we can just use the model
-        model = smp.Unet(
-            encoder_name="resnet34",
-            encoder_weights="imagenet",
-            in_channels=3,
-            classes=1,
-        )
+            # Load saved weights
+            model.load_state_dict(checkpoint['model_state_dict'])
+            model.to(device)
 
-    model.to(device)
+            # Initialize optimizer
+            optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
-    # Loss function and optimizer
+            # Load optimizer state if available
+            if 'optimizer_state_dict' in checkpoint:
+                optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+
+            # Set the starting epoch
+            start_epoch = checkpoint['epoch']
+
+            # Load previous losses if available
+            if 'all_losses' in checkpoint:
+                all_losses = checkpoint['all_losses']
+
+            print(f"Resuming training from epoch {start_epoch}")
+        else:
+            print(f"Checkpoint file not found: {resume_from}")
+            print("Starting from scratch...")
+            resume_from = None
+
+    # If not resuming, create a new model
+    if not resume_from:
+        if input_channels == 1:
+            # For grayscale we need to modify the first layer of the encoder
+            model = smp.Unet(
+                encoder_name="resnet34",
+                encoder_weights="imagenet",
+                in_channels=3,  # Initially 3 channels (will modify)
+                classes=1,
+            )
+
+            # Replace first conv layer to accept grayscale images
+            first_conv_weights = model.encoder.conv1.weight.data
+            new_conv = nn.Conv2d(
+                1, model.encoder.conv1.out_channels,
+                kernel_size=model.encoder.conv1.kernel_size,
+                stride=model.encoder.conv1.stride,
+                padding=model.encoder.conv1.padding,
+                bias=False if model.encoder.conv1.bias is None else True
+            )
+            new_conv.weight.data = torch.mean(first_conv_weights, dim=1, keepdim=True)
+            model.encoder.conv1 = new_conv
+        else:
+            # For RGB, we can just use the model
+            model = smp.Unet(
+                encoder_name="resnet34",
+                encoder_weights="imagenet",
+                in_channels=3,
+                classes=1,
+            )
+
+        model.to(device)
+        optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+
+    # Loss function
     criterion = nn.BCEWithLogitsLoss()
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
     # Train model
-    print(f"Starting training for {num_epochs} epochs...")
-    losses = train_model(model, dataloader, criterion, optimizer, device, num_epochs)
+    print(f"Starting training from epoch {start_epoch + 1} for {num_epochs} epochs...")
+    epoch_losses = train_model(
+        model,
+        dataloader,
+        criterion,
+        optimizer,
+        device,
+        start_epoch=start_epoch,
+        num_epochs=num_epochs,
+        checkpoint_dir=checkpoint_dir,
+        model_prefix=model_prefix
+    )
 
-    # Create plots directory if it doesn't exist
-    model_dir = './models'
-    if not os.path.exists(model_dir):
-        os.makedirs(model_dir)
+    # Combine previous losses with new ones for plotting
+    all_losses.extend(epoch_losses)
 
-    save_path = os.path.join(model_dir, save_path)
-    # Save model
-    torch.save(model.state_dict(), save_path)
-
-    # Plot training loss
+    # Plot all training losses
     plt.figure(figsize=(10, 5))
-    plt.plot(losses, label='Training Loss')
+    plt.plot(range(1, len(all_losses) + 1), all_losses, label='Training Loss')
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
     plt.title('Training Loss over Epochs')
@@ -227,18 +327,34 @@ def pretrain_coco(coco_api_url='http://images.cocodataset.org/annotations/annota
 
     # Create plots directory if it doesn't exist
     plot_dir = './plots'
-    if not os.path.exists(plot_dir):
-        os.makedirs(plot_dir)
+    os.makedirs(plot_dir, exist_ok=True)
 
-    plot_filename = 'coco_training_loss.png'
-
+    # Save loss plot
+    current_epoch = start_epoch + num_epochs
+    plot_filename = f'coco_training_loss_epoch{current_epoch}.png'
     plt.savefig(os.path.join(plot_dir, plot_filename))
-    plt.close()  # Close the plot to free up memory
+    plt.close()
+
+    # Final save location (for backward compatibility)
+    model_dir = './models'
+    os.makedirs(model_dir, exist_ok=True)
+    final_save_path = os.path.join(model_dir, f'{model_prefix}_epoch{current_epoch}.pth')
+
+    # Save final model state for this run
+    torch.save(model.state_dict(), final_save_path)
+
+    print(f"Training completed to epoch {current_epoch}.")
+    print(f"Model saved to {final_save_path}")
+    print(
+        f"To continue training, run with: resume_from='{os.path.join(checkpoint_dir, f'{model_prefix}_epoch{current_epoch}.pth')}'")
 
     return model
 
 def check_annotations(annotation_file='instances_train2017.json'):
     '''Make sure COCO annotation file exists, download if needed'''
+    # For google colab
+    #base_dir = '/dl_group_assignment'
+    #annotation_path = os.path.join(base_dir, 'annotations', annotation_file)
     annotation_path = os.path.join('annotations', annotation_file)
 
     if not os.path.exists(annotation_path):
@@ -302,17 +418,96 @@ def list_coco_categories():
         print(f"Error listing categories: {e}")
         return None
 
+
+def find_latest_checkpoint(checkpoint_dir='./checkpoints', model_prefix='unet_coco'):
+    """Find the latest checkpoint based on epoch number in the filename"""
+    if not os.path.exists(checkpoint_dir):
+        return None
+
+    # Check for metadata file first (more reliable)
+    metadata_path = os.path.join(checkpoint_dir, f'{model_prefix}_metadata.json')
+    if os.path.exists(metadata_path):
+        try:
+            with open(metadata_path, 'r') as f:
+                metadata = json.load(f)
+            latest_epoch = metadata.get('latest_epoch', 0)
+            checkpoint_path = os.path.join(checkpoint_dir, f'{model_prefix}_epoch{latest_epoch}.pth')
+            if os.path.exists(checkpoint_path):
+                return checkpoint_path
+        except:
+            pass  # If metadata reading fails, fall back to checking filenames
+
+    # Fall back to checking filenames
+    checkpoints = [f for f in os.listdir(checkpoint_dir)
+                   if f.startswith(model_prefix) and f.endswith('.pth')]
+
+    if not checkpoints:
+        return None
+
+    # Extract epoch numbers from filenames
+    epoch_numbers = []
+    for checkpoint in checkpoints:
+        try:
+            epoch = int(checkpoint.split('epoch')[1].split('.')[0])
+            epoch_numbers.append((epoch, checkpoint))
+        except:
+            continue
+
+    if not epoch_numbers:
+        return None
+
+    # Get the checkpoint with the highest epoch number
+    latest_epoch, latest_checkpoint = max(epoch_numbers, key=lambda x: x[0])
+    return os.path.join(checkpoint_dir, latest_checkpoint)
+
 if __name__ == "__main__":
     # Print available categories (limit training categories in coco to similar images to tumors)
     #list_coco_categories() # Uncomment if want to view and change selected categories
     categories = [1, 18, 25, 34, 51, 53, 57, 64, 75, 81]
 
-    # pretrain UNet on COCO dataset
-    pretrained_model = pretrain_coco(
-        input_channels = 1,
-        batch_size = 8,
-        learning_rate = 0.0001,
-        num_epochs = 10,
-        save_path = 'unet_coco_pretrained.pth',
-        category_ids=categories
-    )
+    # Define checkpoint directory and model prefix
+    checkpoint_dir = './checkpoints'
+    model_prefix = 'unet_coco'
+
+    # Find latest checkpoint if it exists
+    latest_checkpoint = find_latest_checkpoint(checkpoint_dir, model_prefix)
+
+    if latest_checkpoint:
+        print(f"Found latest checkpoint: {latest_checkpoint}")
+        resume_training = input(f"Resume training from checkpoint? (y/n): ").lower().strip() == 'y'
+
+        if resume_training:
+            # Resume training from the latest checkpoint
+            pretrained_model = pretrain_coco(
+                input_channels=1,
+                batch_size=8,
+                learning_rate=0.0001,
+                num_epochs=1,  # Train for 1 epoch at a time
+                checkpoint_dir=checkpoint_dir,
+                model_prefix=model_prefix,
+                category_ids=categories,
+                resume_from=latest_checkpoint
+            )
+        else:
+            # Start fresh training
+            pretrained_model = pretrain_coco(
+                input_channels=1,
+                batch_size=8,
+                learning_rate=0.0001,
+                num_epochs=1,
+                checkpoint_dir=checkpoint_dir,
+                model_prefix=model_prefix,
+                category_ids=categories
+            )
+    else:
+        print("No existing checkpoints found. Starting fresh training.")
+        # Start fresh training
+        pretrained_model = pretrain_coco(
+            input_channels=1,
+            batch_size=8,
+            learning_rate=0.0001,
+            num_epochs=1,
+            checkpoint_dir=checkpoint_dir,
+            model_prefix=model_prefix,
+            category_ids=categories
+        )
