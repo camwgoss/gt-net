@@ -70,6 +70,11 @@ def liver_threshold_masks(masks):
             mask[mask>=128]=255
     return masks
 
+def liver_masks_to_labels(masks):
+    for mask in masks:
+        mask[mask!=0]=1
+    return masks
+
 def masks_to_labels(masks, label: int):
     '''
     Convert binary masks with values 0 or 255 to labels with values 0 or label.
