@@ -1,5 +1,5 @@
 import os
-from PIL import Image
+from PIL import Image, ImageFilter
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
@@ -244,6 +244,47 @@ def rotate_images(images: list, masks: list = None, output_size: int = 256):
         images_out = np.array(images_out)
         masks_out = np.array(masks_out)
         return images_out, masks_out
+    
+def blur_images(images: list, masks: list = None, output_size: int = 256):
+    '''
+    Applies Gaussian blur with a standard deviation of 1 on images.
+    Arguments:
+        images: List of Numpy arrays, (row, column).
+        masks: Must have identical dimensions to images.
+        output_size: Dimension in pixels of square section to extract.
+    Returns:
+        image_sections: Numpy array (sample, row, col).
+        mask_sections: This will only be returned if masks were provided.
+    '''
+
+    images_out = []
+    masks_out = []
+
+    for ii in range(len(images)):
+
+        image = images[ii]
+        image = Image.fromarray(image)
+        image = image.filter(ImageFilter.GaussianBlur(1))
+        image = np.array(image)
+        images_out.append(image)
+
+        if masks is not None:  # same processing as image
+            mask = masks[ii]
+            mask = Image.fromarray(mask)
+            mask = mask.filter(ImageFilter.GaussianBlur(1))
+            mask = np.array(mask)
+            masks_out.append(mask)
+
+    if masks is None:
+        images_out = resize_images(images_out, output_size=output_size)
+        images_out = np.array(images_out)
+        return images_out
+    else:
+        images_out, masks_out = resize_images(
+           images_out, masks_out, output_size=output_size)
+        images_out = np.array(images_out)
+        masks_out = np.array(masks_out)
+        return images_out, masks_out
 
 
 def elastically_deform_images(images: list, masks: list = None, output_size: int = 256):
@@ -407,3 +448,35 @@ def plot_images_labels(images: np.array, labels: np.array,
         axes[0, 2].set_title('Predict')
 
     return fig
+
+"""
+def plot_model_val_loss(title: str, loss_dict = {}, epochs:int=5):
+    # x values define outside
+    # y is a dictionary where the values are the list 
+
+    x = np.arange(epochs)
+
+    for key in loss_dict:
+        val_loss = loss_dict[key]
+        plt.plot(x, val_loss, label=key)
+    
+    # Add labels and title
+    plt.xlabel('Epoch')
+    plt.ylabel('Dice Loss')
+    plt.title("Scratch Learning Rate")
+
+    plt.legend()
+    plt.savefig("savefig.png")
+
+if __name__ == '__main__':
+
+    title = "Test Plot"
+    plot_dict = {
+        'None': [0, 2, 3, 4, 5],
+        'Crop': [6, 7, 8, 9, 10],
+        'Rotate': [5, 4, 3, 2, 1],
+        'Elastic Deformation': [6, 7, 4, 3, 1]
+    }
+
+    plot_model_val_loss(title, plot_dict)
+"""

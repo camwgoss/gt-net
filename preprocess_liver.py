@@ -1,5 +1,5 @@
 import matplotlib.pyplot as plt
-import nibabel as nib
+#import nibabel as nib
 import os
 import utils.image_processing as ip
 import utils.split_data as split_data
@@ -71,6 +71,8 @@ def download_and_preprocess_data(output_size: int = 256, dataset: str='rel_25per
                 processor = ip.crop_images
             elif augmentation == 'rotate':
                 processor = ip.rotate_images
+            elif augmentation == 'blur':
+                    processor = ip.blur_images
             elif augmentation == 'elastic_deformation':
                 processor = ip.elastically_deform_images
             else:
