@@ -1,8 +1,9 @@
 import os
-from PIL import Image
+from PIL import Image, ImageFilter
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
+from scipy.ndimage import gaussian_filter
 
 
 def get_images(image_dir: str, grayscale=True):
@@ -68,6 +69,11 @@ def liver_threshold_masks(masks):
         else:
             mask[mask<128]=0
             mask[mask>=128]=255
+    return masks
+
+def liver_masks_to_labels(masks):
+    for mask in masks:
+        mask[mask!=0]=1
     return masks
 
 def masks_to_labels(masks, label: int):
@@ -239,6 +245,48 @@ def rotate_images(images: list, masks: list = None, output_size: int = 256):
         images_out = np.array(images_out)
         masks_out = np.array(masks_out)
         return images_out, masks_out
+    
+def blur_images(images: list, masks: list = None, output_size: int = 256):
+    '''
+    Applies Gaussian blur with a standard deviation of 1 on images.
+    Arguments:
+        images: List of Numpy arrays, (row, column).
+        masks: Must have identical dimensions to images.
+        output_size: Dimension in pixels of square section to extract.
+    Returns:
+        image_sections: Numpy array (sample, row, col).
+        mask_sections: This will only be returned if masks were provided.
+    '''
+
+    images_out = []
+    masks_out = []
+
+    image_type = Image.fromarray(images[0]).mode
+
+    for ii in range(len(images)):
+
+        image = images[ii]
+        if image_type == 'F':
+            blur_image = gaussian_filter(image, sigma=3)
+        else:
+            image = Image.fromarray(image)
+            image = image.filter(ImageFilter.GaussianBlur(3))
+        image = np.array(image)
+        images_out.append(image)
+
+        if masks is not None:  # same processing as image
+            mask = masks[ii]
+            mask = Image.fromarray(mask)
+            mask = np.array(mask)
+            masks_out.append(mask)
+
+    if masks is None:
+        images_out = resize_images(images_out, output_size=output_size)
+        return images_out
+    else:
+        images_out, masks_out = resize_images(
+           images_out, masks_out, output_size=output_size)
+        return images_out, masks_out
 
 
 def elastically_deform_images(images: list, masks: list = None, output_size: int = 256):
@@ -281,7 +329,7 @@ def elastically_deform_images(images: list, masks: list = None, output_size: int
                       x**2*y**0, x**2*y**1, x**2*y**2, x**2*y**3,
                       x**3*y**0, x**3*y**1, x**3*y**2, x**3*y**3]).T
 
-        std = 10  # pixels
+        std = 10  # pixels default is 10
         deformations_row = std * np.random.randn(16)
         deformations_col = std * np.random.randn(16)
 
@@ -402,3 +450,35 @@ def plot_images_labels(images: np.array, labels: np.array,
         axes[0, 2].set_title('Predict')
 
     return fig
+
+"""
+def plot_model_val_loss(title: str, loss_dict = {}, epochs:int=5):
+    # x values define outside
+    # y is a dictionary where the values are the list 
+
+    x = np.arange(epochs)
+
+    for key in loss_dict:
+        val_loss = loss_dict[key]
+        plt.plot(x, val_loss, label=key)
+    
+    # Add labels and title
+    plt.xlabel('Epoch')
+    plt.ylabel('Dice Loss')
+    plt.title("Scratch Learning Rate")
+
+    plt.legend()
+    plt.savefig("savefig.png")
+
+if __name__ == '__main__':
+
+    title = "Test Plot"
+    plot_dict = {
+        'None': [0, 2, 3, 4, 5],
+        'Crop': [6, 7, 8, 9, 10],
+        'Rotate': [5, 4, 3, 2, 1],
+        'Elastic Deformation': [6, 7, 4, 3, 1]
+    }
+
+    plot_model_val_loss(title, plot_dict)
+"""
