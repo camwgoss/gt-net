@@ -3,6 +3,7 @@ from PIL import Image, ImageFilter
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
+from scipy.ndimage import gaussian_filter
 
 
 def get_images(image_dir: str, grayscale=True):
@@ -260,30 +261,31 @@ def blur_images(images: list, masks: list = None, output_size: int = 256):
     images_out = []
     masks_out = []
 
+    image_type = Image.fromarray(images[0]).mode
+
     for ii in range(len(images)):
 
         image = images[ii]
-        image = Image.fromarray(image)
-        image = image.filter(ImageFilter.GaussianBlur(1))
+        if image_type == 'F':
+            blur_image = gaussian_filter(image, sigma=3)
+        else:
+            image = Image.fromarray(image)
+            image = image.filter(ImageFilter.GaussianBlur(3))
         image = np.array(image)
         images_out.append(image)
 
         if masks is not None:  # same processing as image
             mask = masks[ii]
             mask = Image.fromarray(mask)
-            mask = mask.filter(ImageFilter.GaussianBlur(1))
             mask = np.array(mask)
             masks_out.append(mask)
 
     if masks is None:
         images_out = resize_images(images_out, output_size=output_size)
-        images_out = np.array(images_out)
         return images_out
     else:
         images_out, masks_out = resize_images(
            images_out, masks_out, output_size=output_size)
-        images_out = np.array(images_out)
-        masks_out = np.array(masks_out)
         return images_out, masks_out
 
 
@@ -327,7 +329,7 @@ def elastically_deform_images(images: list, masks: list = None, output_size: int
                       x**2*y**0, x**2*y**1, x**2*y**2, x**2*y**3,
                       x**3*y**0, x**3*y**1, x**3*y**2, x**3*y**3]).T
 
-        std = 10  # pixels
+        std = 10  # pixels default is 10
         deformations_row = std * np.random.randn(16)
         deformations_col = std * np.random.randn(16)
 
