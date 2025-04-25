@@ -3,9 +3,9 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
-import torchvision.transforms as transforms
 import numpy as np
 import segmentation_models_pytorch as smp
+from segmentation_models_pytorch.losses import DiceLoss
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import gc
@@ -13,7 +13,7 @@ import gc
 from memory_efficient_loading import ChunkedLiverTumorDataset, create_dataloaders, examine_npz
 
 class LiverTumorDataset(Dataset):
-    def __init__(self, images, masks, transform=None):
+    def __init__(self, images, masks):
         """
         Args:
             images: Numpy array of processed images
@@ -22,7 +22,6 @@ class LiverTumorDataset(Dataset):
         """
         self.images = images
         self.masks = masks
-        self.transform = transform
 
     def __len__(self):
         return len(self.images)
@@ -34,18 +33,14 @@ class LiverTumorDataset(Dataset):
 
         # Add channel dimension if needed
         if len(image.shape) == 2:
-            image = np.expand_dims(image, axis=0)  # Make it (1, H, W)
-        if len(mask.shape) == 2:
-            mask = np.expand_dims(mask, axis=0)  # Make it (1, H, W)
+            image = np.expand_dims(image, axis=0) # size: (1, H, W)
+
+        if len(mask.shape) == 3:
+            mask = mask.squeeze(0)
 
         # Convert to torch tensors
         image = torch.from_numpy(image).float()
         mask = torch.from_numpy(mask).float()
-
-        # Apply transformations if specified
-        if self.transform:
-            image = self.transform(image)
-            mask = self.transform(mask)
 
         # Normalize image values to [0, 1] if not already
         if image.max() > 1.0:
@@ -56,36 +51,8 @@ class LiverTumorDataset(Dataset):
 
         return image, mask
 
-
-# Define Dice loss function
-class DiceLoss(nn.Module):
-    def __init__(self, smooth=1.0):
-        super(DiceLoss, self).__init__()
-        self.smooth = smooth
-
-    def forward(self, predictions, targets):
-        # Apply sigmoid to get probabilities
-        predictions = torch.sigmoid(predictions)
-
-        # Flatten the predictions and targets
-        predictions = predictions.view(-1)
-        targets = targets.view(-1)
-
-        # Calculate intersection and union
-        intersection = (predictions * targets).sum()
-        union = predictions.sum() + targets.sum()
-
-        # Calculate Dice coefficient
-        dice = (2.0 * intersection + self.smooth) / (union + self.smooth)
-
-        # Return Dice loss
-        return 1.0 - dice
-
 def load_processed_data(data_path):
-    """Load the processed liver tumor data"""
     processed_data = np.load(data_path)
-
-    # Print available keys
     print(f"Available keys in dataset: {list(processed_data.keys())}")
 
     # Extract data
@@ -94,7 +61,6 @@ def load_processed_data(data_path):
     images_val = processed_data['images_val']
     labels_val = processed_data['labels_val']
 
-    # Print data shapes
     print(f"Training images shape: {images_train.shape}")
     print(f"Training labels shape: {labels_train.shape}")
     print(f"Validation images shape: {images_val.shape}")
@@ -103,18 +69,17 @@ def load_processed_data(data_path):
     return images_train, labels_train, images_val, labels_val
 
 def load_pretrained_model(pretrained_path, input_channels=1):
-    """Load the Coco-pretrained UNet model"""
     # Initialize model with same architecture
     if input_channels == 1:
         # For grayscale
         model = smp.Unet(
             encoder_name="resnet34",
             encoder_weights="imagenet",
-            in_channels=3,  # Initially 3 channels (will modify)
-            classes=1,
+            in_channels=3,
+            classes=1, # only need 1 class for binary segmentation (scale from 0-1, no tumor to tumor)
         )
 
-        # Replace first conv layer for grayscale
+        # Replace first conv layer for grayscale (changes in_channels from 3 to 1)
         first_conv_weights = model.encoder.conv1.weight.data
         new_conv = nn.Conv2d(
             1, model.encoder.conv1.out_channels,
@@ -131,7 +96,7 @@ def load_pretrained_model(pretrained_path, input_channels=1):
             encoder_name="resnet34",
             encoder_weights="imagenet",
             in_channels=3,
-            classes=1,
+            classes=2,
         )
 
     # Load weights
@@ -139,7 +104,6 @@ def load_pretrained_model(pretrained_path, input_channels=1):
         # First try to load full checkpoint
         checkpoint = torch.load(pretrained_path, map_location='cpu')
         if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
-            # This is a full checkpoint
             model.load_state_dict(checkpoint['model_state_dict'])
             print("Loaded model state from checkpoint dictionary")
         else:
@@ -179,7 +143,7 @@ def train_epoch(model, train_loader, criterion, optimizer, device, epoch, num_ep
         batch_count += 1
         progress_bar.set_postfix(loss=epoch_loss / batch_count)
 
-        # Free up memory after each batch
+        # Free up memory after each batch, otherwise might have memory issues
         del images, masks, outputs, loss
         gc.collect()
         if torch.cuda.is_available():
@@ -194,9 +158,7 @@ def train_epoch(model, train_loader, criterion, optimizer, device, epoch, num_ep
 
     return avg_train_loss
 
-
 def validate_model(model, val_loader, criterion, device):
-    """Validate model on validation set"""
     model.eval()
     val_loss = 0.0
     batch_count = 0
@@ -234,7 +196,7 @@ def train_model(model, data_path, criterion, optimizer, device,
         data_path, batch_size=batch_size,
         downsample_factor=downsample_factor)
 
-    # If val_loader is None, create it now
+    # Create val_loader if None
     if val_loader is None:
         val_dataset = ChunkedLiverTumorDataset(
             data_path, subset='val', downsample_factor=downsample_factor)
@@ -321,7 +283,6 @@ def train_model(model, data_path, criterion, optimizer, device,
 
 def visualize_predictions(model, data_path, device, num_samples=8,
                           downsample_factor=2, save_path='./image/liver_predictions.png'):
-    """Visualize model predictions"""
     model.eval()
 
     # Create dataset just for visualization
@@ -336,13 +297,11 @@ def visualize_predictions(model, data_path, device, num_samples=8,
     with torch.no_grad():
         for idx in indices:
             image, mask = val_dataset[idx]
-
-            # Move to device
             image = image.to(device)
 
             # Predict
             output = model(image.unsqueeze(0))
-            prob = torch.sigmoid(output).squeeze().cpu().numpy()
+            prob = torch.softmax(output, dim=1)[0, 1].cpu().numpy()
 
             # Add to samples
             samples.append((
@@ -380,10 +339,11 @@ def visualize_predictions(model, data_path, device, num_samples=8,
 
 if __name__ == "__main__":
     ### TRAINING PARAMETERS ###
-    batch_size = 4
-    learning_rate = 0.0001
+    batch_size = 1
+    learning_rate = 0.00001
     num_epochs = 5
     downsample_factor = 4
+
     # set google drive parameter:
     use_gdrive = False
     save_dir = './models'
@@ -410,7 +370,7 @@ if __name__ == "__main__":
             print(f"Models will be saved to: {save_dir}")
 
             # Look for processed_data.npz in Google Drive
-            data_path = os.path.join(gdrive_base, 'data', 'liver_tumor_segmentation', 'processed_data.npz')
+            data_path = os.path.join(gdrive_base, 'data', 'liver_tumor_segmentation', 'processed_data_relBin.npz')
 
             # Look for the latest pretrained model in Google Drive
             model_dir = os.path.join(gdrive_base, 'models')
@@ -438,7 +398,7 @@ if __name__ == "__main__":
 
     if not use_gdrive:
         # Find the processed_data.npz file
-        data_path = os.path.join(os.path.dirname(__file__), 'data', 'liver_tumor_segmentation', 'processed_data.npz')
+        data_path = os.path.join(os.path.dirname(__file__), 'data', 'liver_tumor_segmentation', 'processed_data_relBin.npz')
 
         # Look for the latest pretrained model
         model_dir = './models'
@@ -488,8 +448,8 @@ if __name__ == "__main__":
     model.to(device)
 
     # Define loss function and optimizer
-    criterion = DiceLoss()
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    criterion = DiceLoss(mode='binary')
+    optimizer = optim.AdamW(model.parameters(), lr=learning_rate)
 
     # Train model
     model, train_losses, val_losses = train_model(

@@ -53,9 +53,7 @@ class COCOSegmentationDataset(Dataset):
 
         # Fill mask with annotations
         for ann in anns:
-            # For polygon annotations
             if type(ann['segmentation']) == list:
-                # Convert polygons to binary mask
                 pixel_mask = self.coco.annToMask(ann)
                 mask = np.maximum(mask, pixel_mask)
 
@@ -68,8 +66,7 @@ class COCOSegmentationDataset(Dataset):
         if self.target_transform:
             mask_img = self.target_transform(mask_img)
 
-        return img, mask_img.float()  # Return image and mask
-
+        return img, mask_img.float()
     def __len__(self):
         return len(self.img_ids)
 
@@ -84,7 +81,7 @@ def train_model(model, dataloader, criterion, optimizer, device, start_epoch=0, 
 
     for epoch in range(start_epoch, start_epoch + num_epochs):
         total_loss = 0.0
-        progress_bar = tqdm(dataloader, desc=f'Epoch {epoch + 1}/{start_epoch + num_epochs}') # Print progress bar
+        progress_bar = tqdm(dataloader, desc=f'Epoch {epoch + 1}/{start_epoch + num_epochs}')
 
         for images, masks in progress_bar:
             images, masks = images.to(device), masks.to(device)
@@ -136,17 +133,16 @@ def train_model(model, dataloader, criterion, optimizer, device, start_epoch=0, 
 
     return epoch_losses
 
-
 def pretrain_coco(coco_api_url='http://images.cocodataset.org/annotations/annotations_trainval2017.zip',
                   annotation_file='instances_train2017.json',
                   input_channels=1,
                   batch_size=8,
                   learning_rate=1e-4,
-                  num_epochs=1,  # Default to 1 epoch per run
+                  num_epochs=1,
                   checkpoint_dir='./checkpoints',
                   model_prefix='unet_coco',
                   category_ids=None,
-                  resume_from=None):  # New parameter to load from previous checkpoint
+                  resume_from=None):
     '''
         Pretrain UNet on COCO dataset using segmentation_models_pytorch with checkpointing
 
@@ -162,7 +158,6 @@ def pretrain_coco(coco_api_url='http://images.cocodataset.org/annotations/annota
             category_ids: Category IDs to use for segmentation
             resume_from: Path to checkpoint to resume from (if None, start fresh)
     '''
-    # Set device
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # Make sure annotations exist
@@ -250,7 +245,6 @@ def pretrain_coco(coco_api_url='http://images.cocodataset.org/annotations/annota
             if 'optimizer_state_dict' in checkpoint:
                 optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 
-            # Set the starting epoch
             start_epoch = checkpoint['epoch']
 
             # Load previous losses if available
@@ -270,7 +264,7 @@ def pretrain_coco(coco_api_url='http://images.cocodataset.org/annotations/annota
             model = smp.Unet(
                 encoder_name="resnet34",
                 encoder_weights="imagenet",
-                in_channels=3,  # Initially 3 channels (will modify)
+                in_channels=3,  # Initially 3 channels
                 classes=1,
             )
 
@@ -293,7 +287,6 @@ def pretrain_coco(coco_api_url='http://images.cocodataset.org/annotations/annota
                 in_channels=3,
                 classes=1,
             )
-
         model.to(device)
         optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
@@ -335,7 +328,7 @@ def pretrain_coco(coco_api_url='http://images.cocodataset.org/annotations/annota
     plt.savefig(os.path.join(plot_dir, plot_filename))
     plt.close()
 
-    # Final save location (for backward compatibility)
+    # Final save location
     model_dir = './models'
     os.makedirs(model_dir, exist_ok=True)
     final_save_path = os.path.join(model_dir, f'{model_prefix}_epoch{current_epoch}.pth')
@@ -351,7 +344,6 @@ def pretrain_coco(coco_api_url='http://images.cocodataset.org/annotations/annota
     return model
 
 def check_annotations(annotation_file='instances_train2017.json'):
-    '''Make sure COCO annotation file exists, download if needed'''
     # For google colab
     #base_dir = '/dl_group_assignment'
     #annotation_path = os.path.join(base_dir, 'annotations', annotation_file)
@@ -371,7 +363,6 @@ def check_annotations(annotation_file='instances_train2017.json'):
         response = requests.get(coco_api_url, stream=True)
         file_size = int(response.headers.get('content-length', 0))
 
-        # Show progress bar while downloading
         pbar = tqdm(total=file_size, unit='B', unit_scale=True, desc="Downloading annotations")
 
         with open('annotations.zip', 'wb') as f:
@@ -418,13 +409,12 @@ def list_coco_categories():
         print(f"Error listing categories: {e}")
         return None
 
-
 def find_latest_checkpoint(checkpoint_dir='./checkpoints', model_prefix='unet_coco'):
     """Find the latest checkpoint based on epoch number in the filename"""
     if not os.path.exists(checkpoint_dir):
         return None
 
-    # Check for metadata file first (more reliable)
+    # Check for metadata file first
     metadata_path = os.path.join(checkpoint_dir, f'{model_prefix}_metadata.json')
     if os.path.exists(metadata_path):
         try:
@@ -435,7 +425,7 @@ def find_latest_checkpoint(checkpoint_dir='./checkpoints', model_prefix='unet_co
             if os.path.exists(checkpoint_path):
                 return checkpoint_path
         except:
-            pass  # If metadata reading fails, fall back to checking filenames
+            pass
 
     # Fall back to checking filenames
     checkpoints = [f for f in os.listdir(checkpoint_dir)
