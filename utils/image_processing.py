@@ -267,10 +267,10 @@ def blur_images(images: list, masks: list = None, output_size: int = 256):
 
         image = images[ii]
         if image_type == 'F':
-            blur_image = gaussian_filter(image, sigma=3)
+            image = gaussian_filter(image, sigma=2)
         else:
             image = Image.fromarray(image)
-            image = image.filter(ImageFilter.GaussianBlur(3))
+            image = image.filter(ImageFilter.GaussianBlur(2))
         image = np.array(image)
         images_out.append(image)
 
