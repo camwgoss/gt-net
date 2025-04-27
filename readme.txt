@@ -16,14 +16,8 @@ Grace Python | gcpython@gmail.com
 > python preprocess_brain.py
 
 4) Download and preprocess liver data. Assuming have previously downloaded and preprocessed brain data.
-4a) Given issues downloading the liver data directly from Kaggle within the code. We each need to download by hand. Navigate to https://www.kaggle.com/datasets/ag3ntsp1d3rx/litsdataset2/data?select=images and hit download icon in the images section (using download in the banner will fail). Once completed switch to 'masks' in the Data Explorer at right and repeat the process to download the masks.
-
-Within the 'data' folder established from step 3, create a 'liver_tumor_segmentation' folder and then a 'raw' folder within the liver folder and save liver data in 'image' and 'mask' folders respectively.
-4b) Subset the data to only those images that contain liver/tumor. From within /gt-net
-> python subset_liver.py
-
-4c) Preprocess liver data. From within /gt-net
-> python preprocess_liver.py
+From https://competitions.codalab.org/competitions/17094 create an account to be able to download the 'Mirror 1' training data. Store the NII files in a 'data/liver_tumor_segmentation/raw' folder. Process and subset the data.
+> python newLiverData_subsetProcess.py
 
 5) (Optional as needed.) Update requirements.txt during development.
 > pip freeze > requirements.txt
